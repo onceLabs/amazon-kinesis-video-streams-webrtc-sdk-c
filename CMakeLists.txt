@@ -68,6 +68,8 @@ if(USE_OPENSSL)
   add_definitions(-DKVS_USE_OPENSSL)
 elseif(USE_MBEDTLS)
   add_definitions(-DKVS_USE_MBEDTLS)
+  # FIXME: there's probably a better way to inject MBEDTLS_CONFIG_FILE flag without mutating the global CMAKE_C_FLAGS
+  set(CMAKE_C_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/configs -DMBEDTLS_CONFIG_FILE='<config_mbedtls.h>' ${CMAKE_C_FLAGS}")
 endif()
 
 if(BUILD_DEPENDENCIES)
@@ -95,7 +97,8 @@ if(BUILD_DEPENDENCIES)
     build_dependency(openssl ${BUILD_ARGS})
     set(OPENSSL_ROOT_DIR ${OPEN_SRC_INSTALL_PREFIX})
   elseif(USE_MBEDTLS)
-    set(BUILD_ARGS -DBUILD_STATIC_LIBS=${BUILD_STATIC_LIBS})
+    set(BUILD_ARGS -DBUILD_STATIC_LIBS=${BUILD_STATIC_LIBS}
+                   -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS})
     build_dependency(mbedtls ${BUILD_ARGS})
   endif()
 
