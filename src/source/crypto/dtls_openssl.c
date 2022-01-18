@@ -1,5 +1,5 @@
 #define LOG_CLASS "DTLS_openssl"
-#include "../Include_i.h"
+
 #include "dtls.h"
 
 // Allow all certificates since they are checked via fingerprint in SDP later

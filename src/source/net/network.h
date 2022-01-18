@@ -45,6 +45,8 @@ extern "C" {
 
 #define MAX_UDP_PACKET_SIZE 65507
 
+#define IS_IPV4_ADDR(pAddress) ((pAddress)->family == KVS_IP_FAMILY_TYPE_IPV4)
+
 typedef enum {
     KVS_SOCKET_PROTOCOL_NONE,
     KVS_SOCKET_PROTOCOL_TCP,

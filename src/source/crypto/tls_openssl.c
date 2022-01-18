@@ -2,7 +2,6 @@
  * Kinesis Video TLS
  */
 #define LOG_CLASS "TLS_openssl"
-#include "../Include_i.h"
 
 STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSession)
 {

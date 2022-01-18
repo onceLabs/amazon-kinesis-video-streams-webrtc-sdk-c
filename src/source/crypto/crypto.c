@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 #define LOG_CLASS "Crypto"
-#include "../Include_i.h"
+
 #include <mbedtls/x509_crt.h>
 #include "dtls.h"
 

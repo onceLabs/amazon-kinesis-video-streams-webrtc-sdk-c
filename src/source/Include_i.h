@@ -20,8 +20,6 @@ extern "C" {
 #define INET  1
 #define INET6 1
 
-#define IS_IPV4_ADDR(pAddress) ((pAddress)->family == KVS_IP_FAMILY_TYPE_IPV4)
-
 ////////////////////////////////////////////////////
 // Project forward declarations
 ////////////////////////////////////////////////////

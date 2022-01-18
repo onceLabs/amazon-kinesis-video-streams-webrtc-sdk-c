@@ -1,5 +1,5 @@
 #define LOG_CLASS "DTLS"
-#include "../Include_i.h"
+
 #include "dtls.h"
 
 STATUS dtlsSessionOnOutBoundData(PDtlsSession pDtlsSession, UINT64 customData, DtlsSessionOutboundPacketFunc callbackFn)

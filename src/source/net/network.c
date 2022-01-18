@@ -2,7 +2,7 @@
  * Kinesis Video Producer Host Info
  */
 #define LOG_CLASS "Network"
-#include "../Include_i.h"
+
 #include "network.h"
 #ifdef KVSWEBRTC_HAVE_IFADDRS_H
 #include <ifaddrs.h>

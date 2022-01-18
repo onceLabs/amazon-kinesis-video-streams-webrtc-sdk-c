@@ -1,7 +1,6 @@
 #ifdef ENABLE_STREAMING
 #define LOG_CLASS "RtcRtp"
 
-#include "../Include_i.h"
 #include "SessionDescription.h"
 #include "Rtp.h"
 #include "RtpVP8Payloader.h"

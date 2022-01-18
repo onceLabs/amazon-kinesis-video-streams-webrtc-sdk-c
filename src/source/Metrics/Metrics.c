@@ -2,7 +2,6 @@
  * Kinesis WebRTC Metrics
  */
 #define LOG_CLASS "Metrics"
-#include "../Include_i.h"
 #include "PeerConnection.h"
 #include "Rtp.h"
 #include "DataChannel.h"

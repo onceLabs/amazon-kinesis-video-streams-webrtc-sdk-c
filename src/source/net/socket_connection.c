@@ -2,7 +2,7 @@
  * Kinesis Video Tcp
  */
 #define LOG_CLASS "SocketConnection"
-#include "../Include_i.h"
+
 #include "socket_connection.h"
 #include "IceAgent.h"
 #include <netdb.h>

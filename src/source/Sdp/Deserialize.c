@@ -1,5 +1,5 @@
 #define LOG_CLASS "SDP"
-#include "../Include_i.h"
+
 #include "SessionDescription.h"
 /**
  * @brief   parse the string of media (streaming description)
