@@ -294,9 +294,9 @@ file(
   "src/source/Rtp/*.c"
   "src/source/Rtp/Codecs/*.c"
   "src/source/Sdp/*.c"
-  "src/source/Srtp/*.c"
+  "src/source/srtp/*.c"
   "src/source/stun/*.c"
-  "src/source/Sctp/*.c"
+  "src/source/sctp/*.c"
   "src/source/Metrics/*.c")
 
 if (USE_OPENSSL)

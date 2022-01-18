@@ -16,8 +16,8 @@ extern "C" {
 #include "dtls.h"
 #include "IceAgent.h"
 #include "network.h"
-#include "SrtpSession.h"
-#include "Sctp.h"
+#include "srtp_session.h"
+#include "sctp_session.h"
 
 #define LOCAL_ICE_UFRAG_LEN 4
 #define LOCAL_ICE_PWD_LEN   24

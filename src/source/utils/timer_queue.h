@@ -18,6 +18,15 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
+#include "kvs/error.h"
+#include "kvs/common_defs.h"
+
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 // TimerQueue functionality
 //////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -117,6 +126,9 @@ typedef struct {
 #define TO_TIMER_QUEUE_HANDLE(p)   ((TIMER_QUEUE_HANDLE)(p))
 #define FROM_TIMER_QUEUE_HANDLE(h) (IS_VALID_TIMER_QUEUE_HANDLE(h) ? (PTimerQueue)(h) : NULL)
 
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 // Internal Functions
 STATUS timerQueueCreateInternal(UINT32, PTimerQueue*);
 STATUS timerQueueCreateInternalEx(UINT32, PTimerQueue*, PCHAR, UINT32);

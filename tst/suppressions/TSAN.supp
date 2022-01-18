@@ -157,18 +157,18 @@ deadlock:dtlsSessionStart
 
 # WARNING: ThreadSanitizer: data race (pid=16168)
 #   Read of size 8 at 0x7f843023d030 by main thread:
-#     #0 freeSctpSession /usr/src/amazon-kinesis-video-streams-webrtc-sdk-c/src/source/Sctp/Sctp.c:134 (libkvsWebrtcClient.so+0x00000005ebea)
+#     #0 sctp_session_free /usr/src/amazon-kinesis-video-streams-webrtc-sdk-c/src/source/Sctp/Sctp.c:134 (libkvsWebrtcClient.so+0x00000005ebea)
 #     #1 freePeerConnection /usr/src/amazon-kinesis-video-streams-webrtc-sdk-c/src/source/PeerConnection/PeerConnection.c:543 (libkvsWebrtcClient.so+0x0000000418ea)
 #     #2 com::amazonaws::kinesis::video::webrtcclient::PeerConnectionFunctionalityTest_connectTwoPeers_Test::TestBody() /usr/src/amazon-kinesis-video-streams-webrtc-sdk-c/tst/PeerConnectionFunctionalityTest.cpp:21 (webrtc_client_test+0x00000058a1e5)
 #     #3 void testing::internal::HandleSehExceptionsInMethodIfSupported<testing::Test, void>(testing::Test*, void (testing::Test::*)(), char const*) <null> (webrtc_client_test+0x000000672819)
 #
 #   Previous write of size 8 at 0x7f843023d030 by thread T26 (mutexes: write M201):
-#     #0 createSctpSession /usr/src/amazon-kinesis-video-streams-webrtc-sdk-c/src/source/Sctp/Sctp.c:120 (libkvsWebrtcClient.so+0x00000005e8b4)
+#     #0 sctp_session_create /usr/src/amazon-kinesis-video-streams-webrtc-sdk-c/src/source/Sctp/Sctp.c:120 (libkvsWebrtcClient.so+0x00000005e8b4)
 #     #1 allocateSctp /usr/src/amazon-kinesis-video-streams-webrtc-sdk-c/src/source/PeerConnection/PeerConnection.c:86 (libkvsWebrtcClient.so+0x00000003ec96)
 #     #2 onInboundPacket /usr/src/amazon-kinesis-video-streams-webrtc-sdk-c/src/source/PeerConnection/PeerConnection.c:136 (libkvsWebrtcClient.so+0x00000003f744)
 #     #3 incomingDataHandler /usr/src/amazon-kinesis-video-streams-webrtc-sdk-c/src/source/Ice/IceAgent.c:1633 (libkvsWebrtcClient.so+0x0000000185e5)
 #     #4 connection_listener_receiveRoutine /usr/src/amazon-kinesis-video-streams-webrtc-sdk-c/src/source/Ice/ConnectionListener.c:328 (libkvsWebrtcClient.so+0x0000000226b7)
-race:freeSctpSession
+race:sctp_session_free
 
 #  WARNING: ThreadSanitizer: data race (pid=16323)
 #    Atomic read of size 1 at 0x7d540001f768 by main thread (mutexes: write M178):
