@@ -286,7 +286,7 @@ file(
   GLOB
   WEBRTC_CLIENT_SOURCE_FILES
   "src/source/crypto/*.c"
-  "src/source/Ice/*.c"
+  "src/source/ice/*.c"
   "src/source/Json/*.c"
   "src/source/net/*.c"
   "src/source/PeerConnection/*.c"
