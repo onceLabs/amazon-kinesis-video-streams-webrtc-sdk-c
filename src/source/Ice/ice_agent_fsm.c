@@ -3,8 +3,8 @@
  */
 #define LOG_CLASS "IceAgentState"
 #include "../Include_i.h"
-#include "TurnConnection.h"
-#include "IceAgentStateMachine.h"
+#include "turn_connection.h"
+#include "ice_agent_fsm.h"
 
 #define ICE_FSM_ENTER()
 #define ICE_FSM_LEAVE()
@@ -193,7 +193,7 @@ STATUS iceAgentFsmCheckConnection(UINT64 customData, UINT64 time)
         pIceAgent->iceAgentState = ICE_AGENT_STATE_CHECK_CONNECTION;
     }
 
-    CHK_STATUS(iceAgentCheckCandidatePairConnection(pIceAgent));
+    CHK_STATUS(ice_agent_checkCandidatePairConnection(pIceAgent));
 
 CleanUp:
 
@@ -345,11 +345,11 @@ STATUS iceAgentFsmNominating(UINT64 customData, UINT64 time)
 
     if (pIceAgent->isControlling) {
         // send the stun use-candidate packet.
-        CHK_STATUS(iceAgentSendCandidateNomination(pIceAgent));
+        CHK_STATUS(ice_agent_sendCandidateNomination(pIceAgent));
     } else {
         // if not controlling, keep sending connection checks and wait for peer
         // to nominate a pair.
-        CHK_STATUS(iceAgentCheckCandidatePairConnection(pIceAgent));
+        CHK_STATUS(ice_agent_checkCandidatePairConnection(pIceAgent));
     }
 
 CleanUp:
@@ -476,9 +476,9 @@ STATUS iceAgentFsmFromReady(UINT64 customData, PUINT64 pState)
         pNodeToDelete = pCurNode;
         pCurNode = pCurNode->pNext;
 
-        if (pIceCandidate->iceCandidateType == ICE_CANDIDATE_TYPE_RELAYED && turnConnectionIsShutdownComplete(pIceCandidate->pTurnConnection)) {
+        if (pIceCandidate->iceCandidateType == ICE_CANDIDATE_TYPE_RELAYED && turn_connection_isShutdownCompleted(pIceCandidate->pTurnConnection)) {
             MUTEX_UNLOCK(pIceAgent->lock);
-            CHK_LOG_ERR(freeTurnConnection(&pIceCandidate->pTurnConnection));
+            CHK_LOG_ERR(turn_connection_free(&pIceCandidate->pTurnConnection));
             MUTEX_LOCK(pIceAgent->lock);
             MEMFREE(pIceCandidate);
             CHK_STATUS(doubleListDeleteNode(pIceAgent->localCandidates, pNodeToDelete));

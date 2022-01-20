@@ -9,7 +9,7 @@
 #endif
 #include <netdb.h>
 
-STATUS getLocalhostIpAddresses(PKvsIpAddress destIpList, PUINT32 pDestIpListLen, IceSetInterfaceFilterFunc filter, UINT64 customData)
+STATUS net_getLocalhostIpAddresses(PKvsIpAddress destIpList, PUINT32 pDestIpListLen, IceSetInterfaceFilterFunc filter, UINT64 customData)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -163,7 +163,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS createSocket(KVS_IP_FAMILY_TYPE familyType, KVS_SOCKET_PROTOCOL protocol, UINT32 sendBufSize, PINT32 pOutSockFd)
+STATUS net_createSocket(KVS_IP_FAMILY_TYPE familyType, KVS_SOCKET_PROTOCOL protocol, UINT32 sendBufSize, PINT32 pOutSockFd)
 {
     STATUS retStatus = STATUS_SUCCESS;
 
@@ -176,17 +176,17 @@ STATUS createSocket(KVS_IP_FAMILY_TYPE familyType, KVS_SOCKET_PROTOCOL protocol,
 
     sockfd = socket(familyType == KVS_IP_FAMILY_TYPE_IPV4 ? AF_INET : AF_INET6, sockType, 0);
     if (sockfd == -1) {
-        DLOGW("socket() failed to create socket with errno %s", getErrorString(getErrorCode()));
+        DLOGW("socket() failed to create socket with errno %s", net_getErrorString(net_getErrorCode()));
         CHK(FALSE, STATUS_CREATE_UDP_SOCKET_FAILED);
     }
 
     optionValue = 1;
     if (setsockopt(sockfd, SOL_SOCKET, NO_SIGNAL, &optionValue, SIZEOF(optionValue)) < 0) {
-        DLOGD("setsockopt() NO_SIGNAL failed with errno %s", getErrorString(getErrorCode()));
+        DLOGD("setsockopt() NO_SIGNAL failed with errno %s", net_getErrorString(net_getErrorCode()));
     }
 
     if (sendBufSize > 0 && setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, &sendBufSize, SIZEOF(sendBufSize)) < 0) {
-        DLOGW("setsockopt() SO_SNDBUF failed with errno %s", getErrorString(getErrorCode()));
+        DLOGW("setsockopt() SO_SNDBUF failed with errno %s", net_getErrorString(net_getErrorCode()));
         CHK(FALSE, STATUS_SOCKET_SET_SEND_BUFFER_SIZE_FAILED);
     }
 
@@ -209,7 +209,7 @@ STATUS createSocket(KVS_IP_FAMILY_TYPE familyType, KVS_SOCKET_PROTOCOL protocol,
     /* disable Nagle algorithm to not delay sending packets. We should have enough density to justify using it. */
     optionValue = 1;
     if (setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &optionValue, SIZEOF(optionValue)) < 0) {
-        DLOGW("setsockopt() TCP_NODELAY failed with errno %s", getErrorString(getErrorCode()));
+        DLOGW("setsockopt() TCP_NODELAY failed with errno %s", net_getErrorString(net_getErrorCode()));
     }
 
 CleanUp:
@@ -217,12 +217,12 @@ CleanUp:
     return retStatus;
 }
 
-STATUS closeSocket(INT32 sockfd)
+STATUS net_closeSocket(INT32 sockfd)
 {
     STATUS retStatus = STATUS_SUCCESS;
 
 #ifdef _WIN32
-    CHK_ERR(closesocket(sockfd) == 0, STATUS_CLOSE_SOCKET_FAILED, "Failed to close the socket %s", getErrorString(getErrorCode()));
+    CHK_ERR(closesocket(sockfd) == 0, STATUS_CLOSE_SOCKET_FAILED, "Failed to close the socket %s", net_getErrorString(net_getErrorCode()));
 #else
     CHK_ERR(close(sockfd) == 0, STATUS_CLOSE_SOCKET_FAILED, "Failed to close the socket %s", strerror(errno));
 #endif
@@ -232,7 +232,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS socketBind(PKvsIpAddress pHostIpAddress, INT32 sockfd)
+STATUS net_bindSocket(PKvsIpAddress pHostIpAddress, INT32 sockfd)
 {
     STATUS retStatus = STATUS_SUCCESS;
     struct sockaddr_in ipv4Addr;
@@ -266,14 +266,14 @@ STATUS socketBind(PKvsIpAddress pHostIpAddress, INT32 sockfd)
     }
 
     if (bind(sockfd, sockAddr, addrLen) < 0) {
-        CHK_STATUS(getIpAddrStr(pHostIpAddress, ipAddrStr, ARRAY_SIZE(ipAddrStr)));
+        CHK_STATUS(net_getIpAddrStr(pHostIpAddress, ipAddrStr, ARRAY_SIZE(ipAddrStr)));
         DLOGW("bind() failed for ip%s address: %s, port %u with errno %s", IS_IPV4_ADDR(pHostIpAddress) ? EMPTY_STRING : "V6", ipAddrStr,
-              (UINT16) getInt16(pHostIpAddress->port), getErrorString(getErrorCode()));
+              (UINT16) getInt16(pHostIpAddress->port), net_getErrorString(net_getErrorCode()));
         CHK(FALSE, STATUS_BINDING_SOCKET_FAILED);
     }
 
     if (getsockname(sockfd, sockAddr, &addrLen) < 0) {
-        DLOGW("getsockname() failed with errno %s", getErrorString(getErrorCode()));
+        DLOGW("getsockname() failed with errno %s", net_getErrorString(net_getErrorCode()));
         CHK(FALSE, STATUS_GET_PORT_NUMBER_FAILED);
     }
 
@@ -283,7 +283,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS socketConnect(PKvsIpAddress pPeerAddress, INT32 sockfd)
+STATUS net_connectSocket(PKvsIpAddress pPeerAddress, INT32 sockfd)
 {
     STATUS retStatus = STATUS_SUCCESS;
     struct sockaddr_in ipv4PeerAddr;
@@ -311,14 +311,14 @@ STATUS socketConnect(PKvsIpAddress pPeerAddress, INT32 sockfd)
     }
 
     retVal = connect(sockfd, peerSockAddr, addrLen);
-    CHK_ERR(retVal >= 0 || getErrorCode() == EINPROGRESS, STATUS_SOCKET_CONNECT_FAILED, "connect() failed with errno %s",
-            getErrorString(getErrorCode()));
+    CHK_ERR(retVal >= 0 || net_getErrorCode() == EINPROGRESS, STATUS_SOCKET_CONNECT_FAILED, "connect() failed with errno %s",
+            net_getErrorString(net_getErrorCode()));
 
 CleanUp:
     return retStatus;
 }
 
-STATUS getIpWithHostName(PCHAR hostname, PKvsIpAddress destIp)
+STATUS net_getIpByHostName(PCHAR hostname, PKvsIpAddress destIp)
 {
     STATUS retStatus = STATUS_SUCCESS;
     INT32 errCode;
@@ -364,7 +364,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS getIpAddrStr(PKvsIpAddress pKvsIpAddress, PCHAR pBuffer, UINT32 bufferLen)
+STATUS net_getIpAddrStr(PKvsIpAddress pKvsIpAddress, PCHAR pBuffer, UINT32 bufferLen)
 {
     STATUS retStatus = STATUS_SUCCESS;
     UINT32 generatedStrLen = 0; // number of characters written if buffer is large enough not counting the null terminator
@@ -391,7 +391,7 @@ CleanUp:
     return retStatus;
 }
 
-BOOL isSameIpAddress(PKvsIpAddress pAddr1, PKvsIpAddress pAddr2, BOOL checkPort)
+BOOL net_compareIpAddress(PKvsIpAddress pAddr1, PKvsIpAddress pAddr2, BOOL checkPort)
 {
     BOOL ret;
     UINT32 addrLen;
@@ -409,7 +409,7 @@ BOOL isSameIpAddress(PKvsIpAddress pAddr1, PKvsIpAddress pAddr2, BOOL checkPort)
 }
 
 #ifdef _WIN32
-INT32 getErrorCode(VOID)
+INT32 net_getErrorCode(VOID)
 {
     INT32 error = WSAGetLastError();
     switch (error) {
@@ -432,14 +432,14 @@ INT32 getErrorCode(VOID)
     return error;
 }
 #else
-INT32 getErrorCode(VOID)
+INT32 net_getErrorCode(VOID)
 {
     return errno;
 }
 #endif
 
 #ifdef _WIN32
-PCHAR getErrorString(INT32 error)
+PCHAR net_getErrorString(INT32 error)
 {
     static CHAR buffer[1024];
     switch (error) {
@@ -467,7 +467,7 @@ PCHAR getErrorString(INT32 error)
     return buffer;
 }
 #else
-PCHAR getErrorString(INT32 error)
+PCHAR net_getErrorString(INT32 error)
 {
     return strerror(error);
 }

@@ -14,7 +14,7 @@ extern "C" {
 #include "hash_table.h"
 #include "double_linked_list.h"
 #include "dtls.h"
-#include "IceAgent.h"
+#include "ice_agent.h"
 #include "network.h"
 #include "srtp_session.h"
 #include "sctp_session.h"

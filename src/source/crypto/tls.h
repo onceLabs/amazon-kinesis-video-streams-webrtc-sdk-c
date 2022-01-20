@@ -1,3 +1,17 @@
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
 #ifndef __KINESIS_VIDEO_WEBRTC_CLIENT_CRYPTO_TLS__
 #define __KINESIS_VIDEO_WEBRTC_CLIENT_CRYPTO_TLS__
 
@@ -6,16 +20,21 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
 #include "io_buffer.h"
 #ifdef KVS_USE_OPENSSL
-//TBD
+// TBD
 #elif KVS_USE_MBEDTLS
 #include <mbedtls/ssl.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #endif
 
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
 typedef enum {
     TLS_SESSION_STATE_NEW,        /* Tls is just created, but the handshake process has not started */
     TLS_SESSION_STATE_CONNECTING, /* TLS is in the process of negotiating a secure connection and verifying the remote fingerprint. */
@@ -59,6 +78,9 @@ struct __TlsSession {
 #endif
 };
 
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 /**
  * @brief   Create TLS session. NOT THREAD SAFE.
  *
@@ -67,14 +89,14 @@ struct __TlsSession {
  *
  * @return STATUS status of operation
  */
-STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSession);
+STATUS tlsSession_create(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSession);
 
 /**
  * Free TLS session. Not thread safe.
  * @param PTlsSession - TlsSession object to free
  * @return STATUS - status of operation
  */
-STATUS freeTlsSession(PTlsSession*);
+STATUS tlsSession_free(PTlsSession*);
 
 /**
  * Start TLS handshake.
@@ -83,7 +105,7 @@ STATUS freeTlsSession(PTlsSession*);
  * @param BOOL - is server
  * @return STATUS - status of operation
  */
-STATUS tlsSessionStart(PTlsSession, BOOL);
+STATUS tlsSession_start(PTlsSession, BOOL);
 
 /**
  * Decrypt application data up to specified bytes. The decrypted data will be copied back to the original buffer.
@@ -94,7 +116,7 @@ STATUS tlsSessionStart(PTlsSession, BOOL);
  * @param UINT32 - the size of buffer that PBYTE is pointing to
  * @param PUINT32 - pointer to the size of encrypted data and will be used to store the size of application data
  */
-STATUS tlsSessionProcessPacket(PTlsSession, PBYTE, UINT32, PUINT32);
+STATUS tlsSession_processPacket(PTlsSession, PBYTE, UINT32, PUINT32);
 
 /**
  * Encrypt application data up to specified bytes. The encrypted data will be sent through specified callback during
@@ -121,8 +143,8 @@ INT32 tlsSessionCertificateVerifyCallback(INT32, X509_STORE_CTX*);
 // following are required callbacks for mbedtls
 // NOTE: const is not a pure C qualifier, they're here because there's no way to type cast
 //       a callback signature.
-INT32 tlsSessionSendCallback(PVOID, const unsigned char*, ULONG);
-INT32 tlsSessionReceiveCallback(PVOID, unsigned char*, ULONG);
+INT32 tlsSession_sendCallback(PVOID, const unsigned char*, ULONG);
+INT32 tlsSession_receiveCallback(PVOID, unsigned char*, ULONG);
 #else
 #error "A Crypto implementation is required."
 #endif

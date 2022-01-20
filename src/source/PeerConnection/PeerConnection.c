@@ -19,7 +19,7 @@
 
 #include "dtls.h"
 #include "connection_listener.h"
-#include "IceAgentStateMachine.h"
+#include "ice_agent_fsm.h"
 #include "network.h"
 #include "RtcpPacket.h"
 #include "JitterBuffer.h"
@@ -662,7 +662,7 @@ VOID onDtlsOutboundPacket(UINT64 customData, PBYTE pBuffer, UINT32 bufferLen)
     }
 
     pKvsPeerConnection = (PKvsPeerConnection) customData;
-    iceAgentSendPacket(pKvsPeerConnection->pIceAgent, pBuffer, bufferLen);
+    ice_agent_send(pKvsPeerConnection->pIceAgent, pBuffer, bufferLen);
     PC_LEAVE();
 }
 
@@ -759,7 +759,7 @@ STATUS rtcpReportsCallback(UINT32 timerId, UINT64 currentTime, UINT64 customData
         putUnalignedInt32BigEndian(rawPacket + 20, packetCount);
         putUnalignedInt32BigEndian(rawPacket + 24, octetCount);
         CHK_STATUS(srtp_session_encryptRtcpPacket(pKvsPeerConnection->pSrtpSession, rawPacket, (PINT32) &packetLen));
-        CHK_STATUS(iceAgentSendPacket(pKvsPeerConnection->pIceAgent, rawPacket, packetLen));
+        CHK_STATUS(ice_agent_send(pKvsPeerConnection->pIceAgent, rawPacket, packetLen));
     }
 
     delay = 100 + (RAND() % 200);
@@ -827,8 +827,8 @@ STATUS createPeerConnection(PRtcConfiguration pConfiguration, PRtcPeerConnection
     iceAgentCallbacks.newLocalCandidateFn = onNewIceLocalCandidate;
     CHK_STATUS(connection_listener_create(&pConnectionListener));
     // IceAgent will own the lifecycle of pConnectionListener;
-    CHK_STATUS(createIceAgent(pKvsPeerConnection->localIceUfrag, pKvsPeerConnection->localIcePwd, &iceAgentCallbacks, pConfiguration,
-                              pKvsPeerConnection->timerQueueHandle, pConnectionListener, &pKvsPeerConnection->pIceAgent));
+    CHK_STATUS(ice_agent_create(pKvsPeerConnection->localIceUfrag, pKvsPeerConnection->localIcePwd, &iceAgentCallbacks, pConfiguration,
+                                pKvsPeerConnection->timerQueueHandle, pConnectionListener, &pKvsPeerConnection->pIceAgent));
 
     NULLABLE_SET_EMPTY(pKvsPeerConnection->canTrickleIce);
 
@@ -872,7 +872,7 @@ STATUS freePeerConnection(PRtcPeerConnection* ppPeerConnection)
 
     /* Shutdown IceAgent first so there is no more incoming packets which can cause
      * SCTP to be allocated again after SCTP is freed. */
-    CHK_LOG_ERR(iceAgentShutdown(pKvsPeerConnection->pIceAgent));
+    CHK_LOG_ERR(ice_agent_shutdown(pKvsPeerConnection->pIceAgent));
 
     // free timer queue first to remove liveness provided by timer
     if (IS_VALID_TIMER_QUEUE_HANDLE(pKvsPeerConnection->timerQueueHandle)) {
@@ -884,7 +884,7 @@ STATUS freePeerConnection(PRtcPeerConnection* ppPeerConnection)
 #ifdef ENABLE_DATA_CHANNEL
     CHK_LOG_ERR(sctp_session_free(&pKvsPeerConnection->pSctpSession));
 #endif
-    CHK_LOG_ERR(freeIceAgent(&pKvsPeerConnection->pIceAgent));
+    CHK_LOG_ERR(ice_agent_free(&pKvsPeerConnection->pIceAgent));
 
 #ifdef ENABLE_STREAMING
     // free transceivers
@@ -1121,7 +1121,8 @@ STATUS setRemoteDescription(PRtcPeerConnection pPeerConnection, PRtcSessionDescr
                 remoteIcePwd = pSessionDescription->mediaDescriptions[i].sdpAttributes[j].attributeValue;
             } else if (STRCMP(pSessionDescription->mediaDescriptions[i].sdpAttributes[j].attributeName, "candidate") == 0) {
                 // Ignore the return value, we have candidates we don't support yet like TURN
-                iceAgentAddRemoteCandidate(pKvsPeerConnection->pIceAgent, pSessionDescription->mediaDescriptions[i].sdpAttributes[j].attributeValue);
+                ice_agent_addRemoteCandidate(pKvsPeerConnection->pIceAgent,
+                                             pSessionDescription->mediaDescriptions[i].sdpAttributes[j].attributeValue);
             } else if (STRCMP(pSessionDescription->mediaDescriptions[i].sdpAttributes[j].attributeName, "fingerprint") == 0) {
                 STRNCPY(pKvsPeerConnection->remoteCertificateFingerprint,
                         pSessionDescription->mediaDescriptions[i].sdpAttributes[j].attributeValue + 8, CERTIFICATE_FINGERPRINT_LENGTH);
@@ -1146,15 +1147,15 @@ STATUS setRemoteDescription(PRtcPeerConnection pPeerConnection, PRtcSessionDescr
         CHK_STATUS(generateJSONSafeString(pKvsPeerConnection->localIceUfrag, LOCAL_ICE_UFRAG_LEN));
         CHK_STATUS(generateJSONSafeString(pKvsPeerConnection->localIcePwd, LOCAL_ICE_PWD_LEN));
         // setup the ice agent.
-        CHK_STATUS(iceAgentRestart(pKvsPeerConnection->pIceAgent, pKvsPeerConnection->localIceUfrag, pKvsPeerConnection->localIcePwd));
-        CHK_STATUS(iceAgentStartGathering(pKvsPeerConnection->pIceAgent));
+        CHK_STATUS(ice_agent_restart(pKvsPeerConnection->pIceAgent, pKvsPeerConnection->localIceUfrag, pKvsPeerConnection->localIcePwd));
+        CHK_STATUS(ice_agent_gather(pKvsPeerConnection->pIceAgent));
     }
 
     STRNCPY(pKvsPeerConnection->remoteIceUfrag, remoteIceUfrag, MAX_ICE_UFRAG_LEN);
     STRNCPY(pKvsPeerConnection->remoteIcePwd, remoteIcePwd, MAX_ICE_PWD_LEN);
 
-    CHK_STATUS(iceAgentStartAgent(pKvsPeerConnection->pIceAgent, pKvsPeerConnection->remoteIceUfrag, pKvsPeerConnection->remoteIcePwd,
-                                  pKvsPeerConnection->isOffer));
+    CHK_STATUS(ice_agent_start(pKvsPeerConnection->pIceAgent, pKvsPeerConnection->remoteIceUfrag, pKvsPeerConnection->remoteIcePwd,
+                               pKvsPeerConnection->isOffer));
 #ifdef ENABLE_STREAMING
     if (!pKvsPeerConnection->isOffer) {
         CHK_STATUS(setPayloadTypesFromOffer(pKvsPeerConnection->pCodecTable, pKvsPeerConnection->pRtxTable, pSessionDescription));
@@ -1239,7 +1240,7 @@ STATUS setLocalDescription(PRtcPeerConnection pPeerConnection, PRtcSessionDescri
 
     CHK(pKvsPeerConnection != NULL && pSessionDescriptionInit != NULL, STATUS_NULL_ARG);
 
-    CHK_STATUS(iceAgentStartGathering(pKvsPeerConnection->pIceAgent));
+    CHK_STATUS(ice_agent_gather(pKvsPeerConnection->pIceAgent));
 #ifdef KVSWEBRTC_HAVE_GETENV
     if (NULL != GETENV(DEBUG_LOG_SDP)) {
         DLOGD("LOCAL_SDP:%s", pSessionDescriptionInit->sdp);
@@ -1363,7 +1364,7 @@ STATUS addIceCandidate(PRtcPeerConnection pPeerConnection, PCHAR pIceCandidate)
 
     CHK(pKvsPeerConnection != NULL && pIceCandidate != NULL, STATUS_NULL_ARG);
 
-    iceAgentAddRemoteCandidate(pKvsPeerConnection->pIceAgent, pIceCandidate);
+    ice_agent_addRemoteCandidate(pKvsPeerConnection->pIceAgent, pIceCandidate);
 
 CleanUp:
 
@@ -1371,7 +1372,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS restartIce(PRtcPeerConnection pPeerConnection)
+STATUS peer_connection_restartIce(PRtcPeerConnection pPeerConnection)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -1384,7 +1385,7 @@ STATUS restartIce(PRtcPeerConnection pPeerConnection)
     CHK_STATUS(generateJSONSafeString(pKvsPeerConnection->localIcePwd, LOCAL_ICE_PWD_LEN));
     pKvsPeerConnection->remoteIceUfrag[0] = '\0';
     pKvsPeerConnection->remoteIcePwd[0] = '\0';
-    CHK_STATUS(iceAgentRestart(pKvsPeerConnection->pIceAgent, pKvsPeerConnection->localIceUfrag, pKvsPeerConnection->localIcePwd));
+    CHK_STATUS(ice_agent_restart(pKvsPeerConnection->pIceAgent, pKvsPeerConnection->localIceUfrag, pKvsPeerConnection->localIcePwd));
 
 CleanUp:
 
@@ -1402,7 +1403,7 @@ STATUS closePeerConnection(PRtcPeerConnection pPeerConnection)
 
     CHK(pKvsPeerConnection != NULL, STATUS_NULL_ARG);
     CHK_LOG_ERR(dtlsSessionShutdown(pKvsPeerConnection->pDtlsSession));
-    CHK_LOG_ERR(iceAgentShutdown(pKvsPeerConnection->pIceAgent));
+    CHK_LOG_ERR(ice_agent_shutdown(pKvsPeerConnection->pIceAgent));
 
 CleanUp:
 

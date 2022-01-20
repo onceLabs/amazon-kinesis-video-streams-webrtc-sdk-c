@@ -12,7 +12,7 @@ extern "C" {
 
 #include "kvs/error.h"
 #include "kvs/common_defs.h"
-#include "IceAgent.h"
+#include "ice_agent.h"
 /**
  * Ice states definitions
  *

@@ -404,43 +404,43 @@ typedef struct {
  *
  * @return STATUS status of execution.
  */
-STATUS serializeStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32 passwordLen, BOOL generateMessageIntegrity, BOOL generateFingerprint,
-                           PBYTE pBuffer, PUINT32 pSize);
-STATUS deserializeStunPacket(PBYTE, UINT32, PBYTE, UINT32, PStunPacket*);
-STATUS freeStunPacket(PStunPacket*);
-STATUS createStunPacket(STUN_PACKET_TYPE stunPacketType, PBYTE transactionId, PStunPacket* ppStunPacket);
-STATUS appendStunAddressAttribute(PStunPacket, STUN_ATTRIBUTE_TYPE, PKvsIpAddress);
-STATUS appendStunUsernameAttribute(PStunPacket, PCHAR);
-STATUS appendStunFlagAttribute(PStunPacket, STUN_ATTRIBUTE_TYPE);
-STATUS appendStunPriorityAttribute(PStunPacket, UINT32);
-STATUS appendStunLifetimeAttribute(PStunPacket, UINT32);
-STATUS appendStunRequestedTransportAttribute(PStunPacket, UINT8);
-STATUS appendStunRealmAttribute(PStunPacket, PCHAR);
-STATUS appendStunNonceAttribute(PStunPacket, PBYTE, UINT16);
-STATUS updateStunNonceAttribute(PStunPacket, PBYTE, UINT16);
-STATUS appendStunErrorCodeAttribute(PStunPacket, PCHAR, UINT16);
-STATUS appendStunIceControllAttribute(PStunPacket, STUN_ATTRIBUTE_TYPE, UINT64);
-STATUS appendStunDataAttribute(PStunPacket, PBYTE, UINT16);
-STATUS appendStunChannelNumberAttribute(PStunPacket, UINT16);
-STATUS appendStunChangeRequestAttribute(PStunPacket, UINT32);
+STATUS stun_serializePacket(PStunPacket pStunPacket, PBYTE password, UINT32 passwordLen, BOOL generateMessageIntegrity, BOOL generateFingerprint,
+                            PBYTE pBuffer, PUINT32 pSize);
+STATUS stun_deserializePacket(PBYTE, UINT32, PBYTE, UINT32, PStunPacket*);
+STATUS stun_freePacket(PStunPacket*);
+STATUS stun_createPacket(STUN_PACKET_TYPE stunPacketType, PBYTE transactionId, PStunPacket* ppStunPacket);
+STATUS stun_attribute_appendAddress(PStunPacket, STUN_ATTRIBUTE_TYPE, PKvsIpAddress);
+STATUS stun_attribute_appendUsername(PStunPacket, PCHAR);
+STATUS stun_attribute_appendFlag(PStunPacket, STUN_ATTRIBUTE_TYPE);
+STATUS stun_attribute_appendPriority(PStunPacket, UINT32);
+STATUS stun_attribute_appendLifetime(PStunPacket, UINT32);
+STATUS stun_attribute_appendRequestedTransport(PStunPacket, UINT8);
+STATUS stun_attribute_appendRealm(PStunPacket, PCHAR);
+STATUS stun_attribute_appendNonce(PStunPacket, PBYTE, UINT16);
+STATUS stun_attribute_updateNonce(PStunPacket, PBYTE, UINT16);
+STATUS stun_attribute_appendErrorCode(PStunPacket, PCHAR, UINT16);
+STATUS stun_attribute_appendIceControll(PStunPacket, STUN_ATTRIBUTE_TYPE, UINT64);
+STATUS stun_attribute_appendData(PStunPacket, PBYTE, UINT16);
+STATUS stun_attribute_appendChannelNumber(PStunPacket, UINT16);
+STATUS stun_attribute_appendChangeRequest(PStunPacket, UINT32);
 
 /**
  * check if PStunPacket has an attribute of type STUN_ATTRIBUTE_TYPE. If so, return the first occurrence through
  * PStunAttributeHeader*
  * @return STATUS of operations
  */
-STATUS getStunAttribute(PStunPacket, STUN_ATTRIBUTE_TYPE, PStunAttributeHeader*);
+STATUS stun_attribute_getByType(PStunPacket, STUN_ATTRIBUTE_TYPE, PStunAttributeHeader*);
 
 /**
  * xor an ip address in place
  */
-STATUS xorIpAddress(PKvsIpAddress, PBYTE);
+STATUS stun_xorIpAddress(PKvsIpAddress, PBYTE);
 //
 // Internal functions
 //
-STATUS stunPackageIpAddr(PStunHeader, STUN_ATTRIBUTE_TYPE, PKvsIpAddress, PBYTE, PUINT32);
-UINT16 getPackagedStunAttributeSize(PStunAttributeHeader);
-STATUS getFirstAvailableStunAttribute(PStunPacket, PStunAttributeHeader*);
+STATUS stun_packIpAddr(PStunHeader, STUN_ATTRIBUTE_TYPE, PKvsIpAddress, PBYTE, PUINT32);
+UINT16 stun_attribute_getPackedSize(PStunAttributeHeader);
+STATUS stun_attribute_getFirstAvailability(PStunPacket, PStunAttributeHeader*);
 
 #ifdef __cplusplus
 }

@@ -6,7 +6,7 @@
 #include "io_buffer.h"
 #include "Rtp.h"
 
-STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSession)
+STATUS tlsSession_create(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSession)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -32,7 +32,7 @@ STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSessi
 
 CleanUp:
     if (STATUS_FAILED(retStatus) && pTlsSession != NULL) {
-        freeTlsSession(&pTlsSession);
+        tlsSession_free(&pTlsSession);
     }
 
     if (ppTlsSession != NULL) {
@@ -43,7 +43,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS freeTlsSession(PTlsSession* ppTlsSession)
+STATUS tlsSession_free(PTlsSession* ppTlsSession)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -68,7 +68,7 @@ CleanUp:
     return retStatus;
 }
 
-INT32 tlsSessionSendCallback(PVOID customData, const unsigned char* buf, ULONG len)
+INT32 tlsSession_sendCallback(PVOID customData, const unsigned char* buf, ULONG len)
 {
     STATUS retStatus = STATUS_SUCCESS;
     PTlsSession pTlsSession = (PTlsSession) customData;
@@ -82,7 +82,7 @@ CleanUp:
     return STATUS_FAILED(retStatus) ? -retStatus : len;
 }
 
-INT32 tlsSessionReceiveCallback(PVOID customData, unsigned char* buf, ULONG len)
+INT32 tlsSession_receiveCallback(PVOID customData, unsigned char* buf, ULONG len)
 {
     STATUS retStatus = STATUS_SUCCESS;
     PTlsSession pTlsSession = (PTlsSession) customData;
@@ -102,7 +102,7 @@ CleanUp:
     return STATUS_FAILED(retStatus) ? -retStatus : readBytes;
 }
 
-STATUS tlsSessionStart(PTlsSession pTlsSession, BOOL isServer)
+STATUS tlsSession_start(PTlsSession pTlsSession, BOOL isServer)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -120,8 +120,8 @@ STATUS tlsSessionStart(PTlsSession pTlsSession, BOOL isServer)
     mbedtls_ssl_conf_rng(&pTlsSession->sslCtxConfig, mbedtls_ctr_drbg_random, &pTlsSession->ctrDrbg);
     CHK(mbedtls_ssl_setup(&pTlsSession->sslCtx, &pTlsSession->sslCtxConfig) == 0, STATUS_TLS_SSL_CTX_SETUP_FAILED);
     mbedtls_ssl_set_mtu(&pTlsSession->sslCtx, DEFAULT_MTU_SIZE);
-    mbedtls_ssl_set_bio(&pTlsSession->sslCtx, pTlsSession, (mbedtls_ssl_send_t*) tlsSessionSendCallback,
-                        (mbedtls_ssl_recv_t*) tlsSessionReceiveCallback, NULL);
+    mbedtls_ssl_set_bio(&pTlsSession->sslCtx, pTlsSession, (mbedtls_ssl_send_t*) tlsSession_sendCallback,
+                        (mbedtls_ssl_recv_t*) tlsSession_receiveCallback, NULL);
 
     /* init and send handshake */
     tlsSessionChangeState(pTlsSession, TLS_SESSION_STATE_CONNECTING);
@@ -137,7 +137,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS tlsSessionProcessPacket(PTlsSession pTlsSession, PBYTE pData, UINT32 bufferLen, PUINT32 pDataLen)
+STATUS tlsSession_processPacket(PTlsSession pTlsSession, PBYTE pData, UINT32 bufferLen, PUINT32 pDataLen)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;

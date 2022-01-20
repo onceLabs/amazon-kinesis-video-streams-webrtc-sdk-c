@@ -301,7 +301,7 @@ STATUS writeFrame(PRtcRtpTransceiver pRtcRtpTransceiver, PFrame pFrame)
         }
 
         CHK_STATUS(srtp_session_encryptRtpPacket(pKvsPeerConnection->pSrtpSession, rawPacket, (PINT32) &packetLen));
-        sendStatus = iceAgentSendPacket(pKvsPeerConnection->pIceAgent, rawPacket, packetLen);
+        sendStatus = ice_agent_send(pKvsPeerConnection->pIceAgent, rawPacket, packetLen);
         if (sendStatus == STATUS_SEND_DATA_FAILED) {
             packetsDiscardedOnSend++;
             bytesDiscardedOnSend += packetLen - headerLen;
@@ -363,7 +363,7 @@ CleanUp:
             pKvsRtpTransceiver->outboundStats.hugeFramesSent++;
         }
     }
-    // iceAgentSendPacket tries to send packet immediately, explicitly settings totalPacketSendDelay to 0
+    // ice_agent_send tries to send packet immediately, explicitly settings totalPacketSendDelay to 0
     pKvsRtpTransceiver->outboundStats.totalPacketSendDelay = 0;
 
     pKvsRtpTransceiver->outboundStats.framesDiscardedOnSend += framesDiscardedOnSend;
@@ -396,7 +396,7 @@ STATUS writeRtpPacket(PKvsPeerConnection pKvsPeerConnection, PRtpPacket pRtpPack
     rawLen = pRtpPacket->rawPacketLength;
     MEMCPY(pRawPacket, pRtpPacket->pRawPacket, pRtpPacket->rawPacketLength);
     CHK_STATUS(srtp_session_encryptRtpPacket(pKvsPeerConnection->pSrtpSession, pRawPacket, &rawLen));
-    CHK_STATUS(iceAgentSendPacket(pKvsPeerConnection->pIceAgent, pRawPacket, rawLen));
+    CHK_STATUS(ice_agent_send(pKvsPeerConnection->pIceAgent, pRawPacket, rawLen));
 
 CleanUp:
     if (locked) {

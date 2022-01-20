@@ -1,6 +1,17 @@
-/*******************************************
-Socket Connection internal include file
-*******************************************/
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
 #ifndef __KINESIS_VIDEO_WEBRTC_SOCKET_CONNECTION__
 #define __KINESIS_VIDEO_WEBRTC_SOCKET_CONNECTION__
 
@@ -9,10 +20,15 @@ Socket Connection internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
 #include "network.h"
 #include "tls.h"
 
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
 #define SOCKET_SEND_RETRY_TIMEOUT_MICRO_SECOND 500000
 #define MAX_SOCKET_WRITE_RETRY                 3
 
@@ -50,6 +66,9 @@ struct __SocketConnection {
 };
 typedef struct __SocketConnection* PSocketConnection;
 
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 /**
  * @brief   Create a SocketConnection object and store it in PSocketConnection. creates a socket based on KVS_SOCKET_PROTOCOL
  *          specified, and bind it to the host ip address. If the protocol is tcp, then peer ip address is required and it will
@@ -66,9 +85,9 @@ typedef struct __SocketConnection* PSocketConnection;
  *
  * @return STATUS status of execution
  */
-STATUS createSocketConnection(KVS_IP_FAMILY_TYPE familyType, KVS_SOCKET_PROTOCOL protocol, PKvsIpAddress pBindAddr, PKvsIpAddress pPeerIpAddr,
-                              UINT64 customData, ConnectionDataAvailableFunc dataAvailableFn, UINT32 sendBufSize,
-                              PSocketConnection* ppSocketConnection);
+STATUS socket_connection_create(KVS_IP_FAMILY_TYPE familyType, KVS_SOCKET_PROTOCOL protocol, PKvsIpAddress pBindAddr, PKvsIpAddress pPeerIpAddr,
+                                UINT64 customData, ConnectionDataAvailableFunc dataAvailableFn, UINT32 sendBufSize,
+                                PSocketConnection* ppSocketConnection);
 
 /**
  * @brief Free the SocketConnection struct
@@ -77,7 +96,7 @@ STATUS createSocketConnection(KVS_IP_FAMILY_TYPE familyType, KVS_SOCKET_PROTOCOL
  *
  * @return STATUS status of execution
  */
-STATUS freeSocketConnection(PSocketConnection* ppSocketConnection);
+STATUS socket_connection_free(PSocketConnection* ppSocketConnection);
 
 /**
  * @brief Given a created SocketConnection, initialize TLS or DTLS handshake depending on the socket protocol
@@ -87,12 +106,12 @@ STATUS freeSocketConnection(PSocketConnection* ppSocketConnection);
  *
  * @return STATUS status of execution
  */
-STATUS socketConnectionInitSecureConnection(PSocketConnection pSocketConnection, BOOL isServer);
+STATUS socket_connection_initSecureConnection(PSocketConnection pSocketConnection, BOOL isServer);
 
 /**
  * Given a created SocketConnection, send data through the underlying socket. If socket type is UDP, then destination
  * address is required. If socket type is tcp, destination address is ignored and data is send to the peer address provided
- * at SocketConnection creation. If socketConnectionInitSecureConnection has been called then data will be encrypted,
+ * at SocketConnection creation. If socket_connection_initSecureConnection has been called then data will be encrypted,
  * otherwise data will be sent as is.
  *
  * @param - PSocketConnection - IN - the SocketConnection struct
@@ -102,7 +121,7 @@ STATUS socketConnectionInitSecureConnection(PSocketConnection pSocketConnection,
  *
  * @return - STATUS - status of execution
  */
-STATUS socketConnectionSendData(PSocketConnection, PBYTE, UINT32, PKvsIpAddress);
+STATUS socket_connection_send(PSocketConnection, PBYTE, UINT32, PKvsIpAddress);
 
 /**
  * If PSocketConnection is not secure then nothing happens, otherwise assuming the bytes passed in are encrypted, and
@@ -115,7 +134,7 @@ STATUS socketConnectionSendData(PSocketConnection, PBYTE, UINT32, PKvsIpAddress)
  *
  * @return - STATUS - status of execution
  */
-STATUS socketConnectionReadData(PSocketConnection, PBYTE, UINT32, PUINT32);
+STATUS socket_connection_readData(PSocketConnection, PBYTE, UINT32, PUINT32);
 
 /**
  * Mark PSocketConnection as closed
@@ -124,7 +143,7 @@ STATUS socketConnectionReadData(PSocketConnection, PBYTE, UINT32, PUINT32);
  *
  * @return - STATUS - status of execution
  */
-STATUS socketConnectionClosed(PSocketConnection);
+STATUS socket_connection_close(PSocketConnection);
 
 /**
  * Check if PSocketConnection is closed
@@ -133,7 +152,7 @@ STATUS socketConnectionClosed(PSocketConnection);
  *
  * @return BOOL whether connection is closed
  */
-BOOL socketConnectionIsClosed(PSocketConnection pSocketConnection);
+BOOL socket_connection_isClosed(PSocketConnection pSocketConnection);
 
 /**
  * @brief   Return whether socket has been connected. Return TRUE for UDP sockets.
@@ -143,12 +162,12 @@ BOOL socketConnectionIsClosed(PSocketConnection pSocketConnection);
  *
  * @return STATUS status of execution
  */
-BOOL socketConnectionIsConnected(PSocketConnection pSocketConnection);
+BOOL socket_connection_isConnected(PSocketConnection pSocketConnection);
 
 // internal functions
 
-STATUS socketConnectionTlsSessionOutBoundPacket(UINT64, PBYTE, UINT32);
-VOID socketConnectionTlsSessionOnStateChange(UINT64, TLS_SESSION_STATE);
+STATUS socket_connection_tlsSessionOutboundPacket(UINT64, PBYTE, UINT32);
+VOID socket_connection_tlsSessionOnStateChange(UINT64, TLS_SESSION_STATE);
 
 #ifdef __cplusplus
 }

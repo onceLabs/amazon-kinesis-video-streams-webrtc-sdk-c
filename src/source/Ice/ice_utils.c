@@ -4,7 +4,7 @@
 #define LOG_CLASS "IceUtils"
 #include "../Include_i.h"
 #include "endianness.h"
-#include "TurnConnection.h"
+#include "turn_connection.h"
 
 STATUS createTransactionIdStore(UINT32 maxIdCount, PTransactionIdStore* ppTransactionIdStore)
 {
@@ -121,7 +121,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS iceUtilsPackageStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32 passwordLen, PBYTE pBuffer, PUINT32 pBufferLen)
+STATUS ice_utils_packStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32 passwordLen, PBYTE pBuffer, PUINT32 pBufferLen)
 {
     STATUS retStatus = STATUS_SUCCESS;
     UINT32 stunPacketSize = 0;
@@ -134,9 +134,9 @@ STATUS iceUtilsPackageStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32
         addMessageIntegrity = TRUE;
     }
 
-    CHK_STATUS(serializeStunPacket(pStunPacket, password, passwordLen, addMessageIntegrity, TRUE, NULL, &stunPacketSize));
+    CHK_STATUS(stun_serializePacket(pStunPacket, password, passwordLen, addMessageIntegrity, TRUE, NULL, &stunPacketSize));
     CHK(stunPacketSize <= *pBufferLen, STATUS_BUFFER_TOO_SMALL);
-    CHK_STATUS(serializeStunPacket(pStunPacket, password, passwordLen, addMessageIntegrity, TRUE, pBuffer, &stunPacketSize));
+    CHK_STATUS(stun_serializePacket(pStunPacket, password, passwordLen, addMessageIntegrity, TRUE, pBuffer, &stunPacketSize));
     *pBufferLen = stunPacketSize;
 
 CleanUp:
@@ -146,16 +146,16 @@ CleanUp:
     return retStatus;
 }
 
-STATUS iceUtilsSendStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32 passwordLen, PKvsIpAddress pDest, PSocketConnection pSocketConnection,
-                              PTurnConnection pTurnConnection, BOOL useTurn)
+STATUS ice_utils_sendStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32 passwordLen, PKvsIpAddress pDest, PSocketConnection pSocketConnection,
+                                PTurnConnection pTurnConnection, BOOL useTurn)
 {
     STATUS retStatus = STATUS_SUCCESS;
     UINT32 stunPacketSize = STUN_PACKET_ALLOCATION_SIZE;
     PBYTE stunPacketBuffer = NULL;
     // #memory, #heap. #TBD.
     CHK(NULL != (stunPacketBuffer = (PBYTE) MEMALLOC(STUN_PACKET_ALLOCATION_SIZE)), STATUS_ICE_EMPTY_STUN_SEND_BUF);
-    CHK_STATUS(iceUtilsPackageStunPacket(pStunPacket, password, passwordLen, stunPacketBuffer, &stunPacketSize));
-    CHK_STATUS(iceUtilsSendData(stunPacketBuffer, stunPacketSize, pDest, pSocketConnection, pTurnConnection, useTurn));
+    CHK_STATUS(ice_utils_packStunPacket(pStunPacket, password, passwordLen, stunPacketBuffer, &stunPacketSize));
+    CHK_STATUS(ice_utils_send(stunPacketBuffer, stunPacketSize, pDest, pSocketConnection, pTurnConnection, useTurn));
 
 CleanUp:
     SAFE_MEMFREE(stunPacketBuffer);
@@ -164,17 +164,17 @@ CleanUp:
     return retStatus;
 }
 
-STATUS iceUtilsSendData(PBYTE buffer, UINT32 size, PKvsIpAddress pDest, PSocketConnection pSocketConnection, PTurnConnection pTurnConnection,
-                        BOOL useTurn)
+STATUS ice_utils_send(PBYTE buffer, UINT32 size, PKvsIpAddress pDest, PSocketConnection pSocketConnection, PTurnConnection pTurnConnection,
+                      BOOL useTurn)
 {
     STATUS retStatus = STATUS_SUCCESS;
 
     CHK((pSocketConnection != NULL && !useTurn) || (pTurnConnection != NULL && useTurn), STATUS_INVALID_ARG);
     // if you are using turn connection, you need to transfer the ip of this destination.
     if (useTurn) {
-        retStatus = turnConnectionSendData(pTurnConnection, buffer, size, pDest);
+        retStatus = turn_connection_send(pTurnConnection, buffer, size, pDest);
     } else {
-        retStatus = socketConnectionSendData(pSocketConnection, buffer, size, pDest);
+        retStatus = socket_connection_send(pSocketConnection, buffer, size, pDest);
     }
 
     // Fix-up the not-yet-ready socket
@@ -235,7 +235,7 @@ STATUS parseIceServer(PIceServer pIceServer, PCHAR url, PCHAR username, PCHAR cr
         STRNCPY(pIceServer->url, urlNoPrefix, MAX_ICE_CONFIG_URI_LEN);
     }
 
-    CHK_STATUS(getIpWithHostName(pIceServer->url, &pIceServer->ipAddress));
+    CHK_STATUS(net_getIpByHostName(pIceServer->url, &pIceServer->ipAddress));
     pIceServer->ipAddress.port = (UINT16) getInt16((INT16) port);
 
 CleanUp:

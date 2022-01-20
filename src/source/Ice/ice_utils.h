@@ -83,7 +83,7 @@ STATUS iceUtilsGenerateTransactionId(PBYTE, UINT32);
  *
  * @return STATUS status of execution.
  */
-STATUS iceUtilsPackageStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32 passwordLen, PBYTE pBuffer, PUINT32 pBufferLen);
+STATUS ice_utils_packStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32 passwordLen, PBYTE pBuffer, PUINT32 pBufferLen);
 /**
  * @brief
  *
@@ -97,21 +97,21 @@ STATUS iceUtilsPackageStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32
  *
  * @return STATUS status of execution
  */
-STATUS iceUtilsSendStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32 passwordLen, PKvsIpAddress pDest, PSocketConnection pSocketConnection,
-                              struct __TurnConnection* pTurnConnection, BOOL useTurn);
+STATUS ice_utils_sendStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32 passwordLen, PKvsIpAddress pDest, PSocketConnection pSocketConnection,
+                                struct __TurnConnection* pTurnConnection, BOOL useTurn);
 /**
  * @brief   send the packet via the socket of the selected ice candidate.
  */
-STATUS iceUtilsSendData(PBYTE, UINT32, PKvsIpAddress, PSocketConnection, struct __TurnConnection*, BOOL);
+STATUS ice_utils_send(PBYTE, UINT32, PKvsIpAddress, PSocketConnection, struct __TurnConnection*, BOOL);
 
 typedef struct {
-    BOOL isTurn;
-    BOOL isSecure;
+    BOOL isTurn;   //!< is turn server or not.
+    BOOL isSecure; //!< is secure connection or not.
     CHAR url[MAX_ICE_CONFIG_URI_LEN + 1];
     KvsIpAddress ipAddress;
     CHAR username[MAX_ICE_CONFIG_USER_NAME_LEN + 1];
     CHAR credential[MAX_ICE_CONFIG_CREDENTIAL_LEN + 1];
-    KVS_SOCKET_PROTOCOL transport;
+    KVS_SOCKET_PROTOCOL transport; //!< tcp or udp.
 } IceServer, *PIceServer;
 /**
  * @brief #TBD, consider to change this api, but it is not a bottleneck.

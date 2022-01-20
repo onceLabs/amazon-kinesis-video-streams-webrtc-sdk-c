@@ -1253,7 +1253,7 @@ PUBLIC_API STATUS setRemoteDescription(PRtcPeerConnection, PRtcSessionDescriptio
  *
  * @return - STATUS code of the execution. STATUS_SUCCESS on success
  */
-PUBLIC_API STATUS restartIce(PRtcPeerConnection);
+PUBLIC_API STATUS peer_connection_restartIce(PRtcPeerConnection);
 
 /**
  * @brief Close the underlying DTLS session and IceAgent connection. Trigger RtcOnConnectionStateChange to RTC_PEER_CONNECTION_STATE_CLOSED

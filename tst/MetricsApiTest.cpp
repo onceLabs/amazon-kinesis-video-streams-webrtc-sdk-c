@@ -126,7 +126,7 @@ TEST_F(MetricsApiTest, webRtcIceCandidateGetMetrics)
     iceCandidatePair.remote = &remoteCandidate;
     pIceAgent->pDataSendingIceCandidatePair = &iceCandidatePair;
 
-    EXPECT_EQ(STATUS_SUCCESS, updateSelectedLocalRemoteCandidateStats(pIceAgent));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_updateSelectedLocalRemoteCandidateStats(pIceAgent));
 
     rtcIceMetrics.requestedTypeOfStats = RTC_STATS_TYPE_LOCAL_CANDIDATE;
     EXPECT_EQ(STATUS_SUCCESS, rtcPeerConnectionGetMetrics(pRtcPeerConnection, NULL, &rtcIceMetrics));

@@ -3,7 +3,7 @@
  */
 #define LOG_CLASS "TLS_openssl"
 
-STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSession)
+STATUS tlsSession_create(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSession)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -20,7 +20,7 @@ STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSessi
 
 CleanUp:
     if (STATUS_FAILED(retStatus) && pTlsSession != NULL) {
-        freeTlsSession(&pTlsSession);
+        tlsSession_free(&pTlsSession);
     }
 
     if (ppTlsSession != NULL) {
@@ -31,7 +31,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS freeTlsSession(PTlsSession* ppTlsSession)
+STATUS tlsSession_free(PTlsSession* ppTlsSession)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -65,7 +65,7 @@ INT32 tlsSessionCertificateVerifyCallback(INT32 preverify_ok, X509_STORE_CTX* ct
     return 1;
 }
 
-STATUS tlsSessionStart(PTlsSession pTlsSession, BOOL isServer)
+STATUS tlsSession_start(PTlsSession pTlsSession, BOOL isServer)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -128,7 +128,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS tlsSessionProcessPacket(PTlsSession pTlsSession, PBYTE pData, UINT32 bufferLen, PUINT32 pDataLen)
+STATUS tlsSession_processPacket(PTlsSession pTlsSession, PBYTE pData, UINT32 bufferLen, PUINT32 pDataLen)
 {
     STATUS retStatus = STATUS_SUCCESS;
     BOOL continueRead = TRUE;

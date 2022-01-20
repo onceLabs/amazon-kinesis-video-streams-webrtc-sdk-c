@@ -610,7 +610,7 @@ TEST_F(PeerConnectionFunctionalityTest, iceRestartTest)
 
     EXPECT_EQ(connectTwoPeers(offerPc, answerPc), TRUE);
 
-    EXPECT_EQ(restartIce(offerPc), STATUS_SUCCESS);
+    EXPECT_EQ(peer_connection_restartIce(offerPc), STATUS_SUCCESS);
 
     /* reset state change count */
     MEMSET(&stateChangeCount, 0x00, SIZEOF(stateChangeCount));
@@ -644,7 +644,7 @@ TEST_F(PeerConnectionFunctionalityTest, iceRestartTestForcedTurn)
 
     EXPECT_EQ(connectTwoPeers(offerPc, answerPc), TRUE);
 
-    EXPECT_EQ(restartIce(offerPc), STATUS_SUCCESS);
+    EXPECT_EQ(peer_connection_restartIce(offerPc), STATUS_SUCCESS);
 
     /* reset state change count */
     MEMSET(&stateChangeCount, 0x00, SIZEOF(stateChangeCount));

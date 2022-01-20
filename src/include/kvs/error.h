@@ -438,7 +438,7 @@ extern "C" {
 #define STATUS_TURN_CONNECTION_CREATE_SOCKET                               STATUS_ICE_BASE + 0x00000030
 #define STATUS_TURN_FSM_REFRESH_ALLOCATION                                 STATUS_ICE_BASE + 0x00000031
 #define STATUS_ICE_EMPTY_STUN_SEND_BUF                                     STATUS_ICE_BASE + 0x00000032
-
+#define STATUS_ICE_AGENT_NULL_ARG                                          STATUS_ICE_BASE + 0x00000033
 /*!@} */
 
 /////////////////////////////////////////////////////

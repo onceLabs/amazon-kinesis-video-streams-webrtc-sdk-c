@@ -26,7 +26,7 @@ TEST_F(IceApiTest, ConnectionListenerApiTest)
     localhost.port = 0;
 
     EXPECT_EQ(STATUS_SUCCESS,
-              createSocketConnection(KVS_IP_FAMILY_TYPE_IPV4, KVS_SOCKET_PROTOCOL_UDP, &localhost, NULL, 0, NULL, 0, &pDummySocketConnection));
+              socket_connection_create(KVS_IP_FAMILY_TYPE_IPV4, KVS_SOCKET_PROTOCOL_UDP, &localhost, NULL, 0, NULL, 0, &pDummySocketConnection));
 
     EXPECT_NE(STATUS_SUCCESS, connection_listener_create(NULL));
     EXPECT_NE(STATUS_SUCCESS, connection_listener_free(NULL));
@@ -46,7 +46,7 @@ TEST_F(IceApiTest, ConnectionListenerApiTest)
     // free is idempotent
     EXPECT_EQ(STATUS_SUCCESS, connection_listener_free(&pConnectionListener));
 
-    EXPECT_EQ(STATUS_SUCCESS, freeSocketConnection(&pDummySocketConnection));
+    EXPECT_EQ(STATUS_SUCCESS, socket_connection_free(&pDummySocketConnection));
 }
 
 TEST_F(IceApiTest, IceUtilApiTest)
@@ -76,25 +76,25 @@ TEST_F(IceApiTest, IceUtilApiTest)
     EXPECT_NE(STATUS_SUCCESS, iceUtilsGenerateTransactionId(NULL, STUN_TRANSACTION_ID_LEN));
     EXPECT_NE(STATUS_SUCCESS, iceUtilsGenerateTransactionId(testTransactionId, 0));
 
-    EXPECT_EQ(STATUS_SUCCESS, createStunPacket(STUN_PACKET_TYPE_SEND_INDICATION, NULL, &pStunPacket));
-    EXPECT_NE(STATUS_SUCCESS, iceUtilsPackageStunPacket(NULL, testPassword, testPasswordLen, testBuffer, &testBufferLen));
-    EXPECT_NE(STATUS_SUCCESS, iceUtilsPackageStunPacket(pStunPacket, NULL, testPasswordLen, testBuffer, &testBufferLen));
-    EXPECT_NE(STATUS_SUCCESS, iceUtilsPackageStunPacket(pStunPacket, testPassword, 0, testBuffer, &testBufferLen));
-    EXPECT_NE(STATUS_SUCCESS, iceUtilsPackageStunPacket(pStunPacket, testPassword, testPasswordLen, NULL, &testBufferLen));
-    EXPECT_NE(STATUS_SUCCESS, iceUtilsPackageStunPacket(pStunPacket, testPassword, testPasswordLen, testBuffer, NULL));
+    EXPECT_EQ(STATUS_SUCCESS, stun_createPacket(STUN_PACKET_TYPE_SEND_INDICATION, NULL, &pStunPacket));
+    EXPECT_NE(STATUS_SUCCESS, ice_utils_packStunPacket(NULL, testPassword, testPasswordLen, testBuffer, &testBufferLen));
+    EXPECT_NE(STATUS_SUCCESS, ice_utils_packStunPacket(pStunPacket, NULL, testPasswordLen, testBuffer, &testBufferLen));
+    EXPECT_NE(STATUS_SUCCESS, ice_utils_packStunPacket(pStunPacket, testPassword, 0, testBuffer, &testBufferLen));
+    EXPECT_NE(STATUS_SUCCESS, ice_utils_packStunPacket(pStunPacket, testPassword, testPasswordLen, NULL, &testBufferLen));
+    EXPECT_NE(STATUS_SUCCESS, ice_utils_packStunPacket(pStunPacket, testPassword, testPasswordLen, testBuffer, NULL));
 
-    EXPECT_NE(STATUS_SUCCESS, iceUtilsSendStunPacket(pStunPacket, testPassword, testPasswordLen, &testIpAddr, &testSocketConn, NULL, TRUE));
-    EXPECT_NE(STATUS_SUCCESS, iceUtilsSendStunPacket(pStunPacket, testPassword, testPasswordLen, &testIpAddr, NULL, &testTurnConn, FALSE));
+    EXPECT_NE(STATUS_SUCCESS, ice_utils_sendStunPacket(pStunPacket, testPassword, testPasswordLen, &testIpAddr, &testSocketConn, NULL, TRUE));
+    EXPECT_NE(STATUS_SUCCESS, ice_utils_sendStunPacket(pStunPacket, testPassword, testPasswordLen, &testIpAddr, NULL, &testTurnConn, FALSE));
 
     EXPECT_EQ(STATUS_SUCCESS, createTransactionIdStore(20, &pTransactionIdStore));
     transactionIdStoreInsert(pTransactionIdStore, testTransactionId);
     transactionIdStoreHasId(pTransactionIdStore, testTransactionId);
     transactionIdStoreReset(pTransactionIdStore);
     EXPECT_EQ(STATUS_SUCCESS, iceUtilsGenerateTransactionId(testTransactionId, STUN_TRANSACTION_ID_LEN));
-    EXPECT_EQ(STATUS_SUCCESS, iceUtilsPackageStunPacket(pStunPacket, testPassword, testPasswordLen, testBuffer, &testBufferLen));
-    EXPECT_EQ(STATUS_SUCCESS, iceUtilsPackageStunPacket(pStunPacket, NULL, 0, testBuffer, &testBufferLen));
+    EXPECT_EQ(STATUS_SUCCESS, ice_utils_packStunPacket(pStunPacket, testPassword, testPasswordLen, testBuffer, &testBufferLen));
+    EXPECT_EQ(STATUS_SUCCESS, ice_utils_packStunPacket(pStunPacket, NULL, 0, testBuffer, &testBufferLen));
 
-    EXPECT_EQ(STATUS_SUCCESS, freeStunPacket(&pStunPacket));
+    EXPECT_EQ(STATUS_SUCCESS, stun_freePacket(&pStunPacket));
     EXPECT_EQ(STATUS_SUCCESS, freeTransactionIdStore(&pTransactionIdStore));
 }
 } // namespace webrtcclient

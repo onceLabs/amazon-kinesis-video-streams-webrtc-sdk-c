@@ -137,7 +137,7 @@ PVOID connectionListenAddConnectionRoutine(PVOID arg)
     for (i = 0; i < pCustomData->connectionToAdd; ++i) {
         randomDelay = (UINT64)(RAND() % 300) * HUNDREDS_OF_NANOS_IN_A_MILLISECOND;
         THREAD_SLEEP(randomDelay);
-        CHECK(STATUS_SUCCEEDED(createSocketConnection((KVS_IP_FAMILY_TYPE) localhost.family, KVS_SOCKET_PROTOCOL_UDP, &localhost, NULL, 0, NULL, 0,
+        CHECK(STATUS_SUCCEEDED(socket_connection_create((KVS_IP_FAMILY_TYPE) localhost.family, KVS_SOCKET_PROTOCOL_UDP, &localhost, NULL, 0, NULL, 0,
                                                       &pSocketConnection)));
         pCustomData->socketConnectionList[i] = pSocketConnection;
         CHECK(STATUS_SUCCEEDED(connection_listener_add(pCustomData->pConnectionListener, pSocketConnection)));
@@ -189,7 +189,7 @@ TEST_F(IceFunctionalityTest, connectionListenerFunctionalityTest)
     EXPECT_EQ(connectionCount, routine1CustomData.connectionToAdd + routine2CustomData.connectionToAdd);
 
     CHECK(STATUS_SUCCEEDED(
-        createSocketConnection((KVS_IP_FAMILY_TYPE) localhost.family, KVS_SOCKET_PROTOCOL_UDP, &localhost, NULL, 0, NULL, 0, &pSocketConnection)));
+        socket_connection_create((KVS_IP_FAMILY_TYPE) localhost.family, KVS_SOCKET_PROTOCOL_UDP, &localhost, NULL, 0, NULL, 0, &pSocketConnection)));
     EXPECT_EQ(STATUS_SUCCESS, connection_listener_add(pConnectionListener, pSocketConnection));
 
     newConnectionCount = pConnectionListener->socketCount;
@@ -215,14 +215,14 @@ TEST_F(IceFunctionalityTest, connectionListenerFunctionalityTest)
 
     EXPECT_EQ(STATUS_SUCCESS, connection_listener_free(&pConnectionListener));
 
-    EXPECT_EQ(STATUS_SUCCESS, freeSocketConnection(&pSocketConnection));
+    EXPECT_EQ(STATUS_SUCCESS, socket_connection_free(&pSocketConnection));
 
     for (i = 0; i < routine1CustomData.connectionToAdd; ++i) {
-        EXPECT_EQ(STATUS_SUCCESS, freeSocketConnection(&routine1CustomData.socketConnectionList[i]));
+        EXPECT_EQ(STATUS_SUCCESS, socket_connection_free(&routine1CustomData.socketConnectionList[i]));
     }
 
     for (i = 0; i < routine2CustomData.connectionToAdd; ++i) {
-        EXPECT_EQ(STATUS_SUCCESS, freeSocketConnection(&routine2CustomData.socketConnectionList[i]));
+        EXPECT_EQ(STATUS_SUCCESS, socket_connection_free(&routine2CustomData.socketConnectionList[i]));
     }
 }
 
@@ -243,7 +243,7 @@ TEST_F(IceFunctionalityTest, IceAgentComputeCandidatePairPriorityUnitTest)
     iceCandidatePair.local = &localCandidate;
     iceCandidatePair.remote = &remoteCandidate;
 
-    EXPECT_EQ(priority, computeCandidatePairPriority(&iceCandidatePair, TRUE));
+    EXPECT_EQ(priority, ice_candidate_pair_computePriority(&iceCandidatePair, TRUE));
 }
 
 TEST_F(IceFunctionalityTest, IceAgentUpdateCandidateAddressUnitTest)
@@ -260,19 +260,19 @@ TEST_F(IceFunctionalityTest, IceAgentUpdateCandidateAddressUnitTest)
 
     localCandidate.state = ICE_CANDIDATE_STATE_NEW;
 
-    EXPECT_NE(STATUS_SUCCESS, updateCandidateAddress(NULL, &newIpAddress));
-    EXPECT_NE(STATUS_SUCCESS, updateCandidateAddress(&localCandidate, NULL));
+    EXPECT_NE(STATUS_SUCCESS, ice_candidate_updateAddress(NULL, &newIpAddress));
+    EXPECT_NE(STATUS_SUCCESS, ice_candidate_updateAddress(&localCandidate, NULL));
     localCandidate.iceCandidateType = ICE_CANDIDATE_TYPE_HOST;
-    EXPECT_NE(STATUS_SUCCESS, updateCandidateAddress(&localCandidate, &newIpAddress));
+    EXPECT_NE(STATUS_SUCCESS, ice_candidate_updateAddress(&localCandidate, &newIpAddress));
     localCandidate.iceCandidateType = ICE_CANDIDATE_TYPE_SERVER_REFLEXIVE;
-    EXPECT_EQ(STATUS_SUCCESS, updateCandidateAddress(&localCandidate, &newIpAddress));
+    EXPECT_EQ(STATUS_SUCCESS, ice_candidate_updateAddress(&localCandidate, &newIpAddress));
 
     EXPECT_EQ(localCandidate.ipAddress.port, newIpAddress.port);
     EXPECT_EQ(0, MEMCMP(localCandidate.ipAddress.address, newIpAddress.address, IPV4_ADDRESS_LENGTH));
 
     newIpAddress.family = KVS_IP_FAMILY_TYPE_IPV6;
     localCandidate.state = ICE_CANDIDATE_STATE_NEW;
-    EXPECT_EQ(STATUS_SUCCESS, updateCandidateAddress(&localCandidate, &newIpAddress));
+    EXPECT_EQ(STATUS_SUCCESS, ice_candidate_updateAddress(&localCandidate, &newIpAddress));
 
     EXPECT_EQ(localCandidate.ipAddress.port, newIpAddress.port);
     EXPECT_EQ(0, MEMCMP(localCandidate.ipAddress.address, newIpAddress.address, IPV6_ADDRESS_LENGTH));
@@ -348,16 +348,16 @@ TEST_F(IceFunctionalityTest, IceAgentAddRemoteCandidateUnitTest)
     iceAgent.iceAgentState = ICE_CANDIDATE_STATE_NEW;
 
     // invalid input
-    EXPECT_NE(STATUS_SUCCESS, iceAgentAddRemoteCandidate(NULL, NULL));
-    EXPECT_NE(STATUS_SUCCESS, iceAgentAddRemoteCandidate(&iceAgent, NULL));
-    EXPECT_NE(STATUS_SUCCESS, iceAgentAddRemoteCandidate(NULL, ip4HostCandidateStr));
-    EXPECT_NE(STATUS_SUCCESS, iceAgentAddRemoteCandidate(&iceAgent, (PCHAR) ""));
-    EXPECT_NE(STATUS_SUCCESS, iceAgentAddRemoteCandidate(&iceAgent, (PCHAR) "randomStuff"));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_addRemoteCandidate(NULL, NULL));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_addRemoteCandidate(&iceAgent, NULL));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_addRemoteCandidate(NULL, ip4HostCandidateStr));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_addRemoteCandidate(&iceAgent, (PCHAR) ""));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_addRemoteCandidate(&iceAgent, (PCHAR) "randomStuff"));
 
     // add a ip4 local candidate so that iceCandidate pair will be formed when add remote candidate succeeded
     EXPECT_EQ(STATUS_SUCCESS, doubleListInsertItemTail(iceAgent.localCandidates, (UINT64) &ip4TestLocalCandidate));
-    EXPECT_EQ(STATUS_SUCCESS, iceAgentAddRemoteCandidate(&iceAgent, ip4HostCandidateStr));
-    EXPECT_EQ(STATUS_SUCCESS, iceAgentAddRemoteCandidate(&iceAgent, ip4HostCandidateStr));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_addRemoteCandidate(&iceAgent, ip4HostCandidateStr));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_addRemoteCandidate(&iceAgent, ip4HostCandidateStr));
     EXPECT_EQ(STATUS_SUCCESS, doubleListGetNodeCount(iceAgent.remoteCandidates, &remoteCandidateCount));
     // duplicated candidates are not added
     EXPECT_EQ(1, remoteCandidateCount);
@@ -367,8 +367,8 @@ TEST_F(IceFunctionalityTest, IceAgentAddRemoteCandidateUnitTest)
 
     // add an ip6 local candidate so that iceCandidate pair will be formed when add remote candidate succeeded
     EXPECT_EQ(STATUS_SUCCESS, doubleListInsertItemTail(iceAgent.localCandidates, (UINT64) &ip6TestLocalCandidate));
-    EXPECT_EQ(STATUS_SUCCESS, iceAgentAddRemoteCandidate(&iceAgent, ip6HostCandidateStr));
-    EXPECT_EQ(STATUS_SUCCESS, iceAgentAddRemoteCandidate(&iceAgent, ip6HostCandidateStr));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_addRemoteCandidate(&iceAgent, ip6HostCandidateStr));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_addRemoteCandidate(&iceAgent, ip6HostCandidateStr));
     EXPECT_EQ(STATUS_SUCCESS, doubleListGetNodeCount(iceAgent.remoteCandidates, &remoteCandidateCount));
     // duplicated candidates are not added
     EXPECT_EQ(2, remoteCandidateCount);
@@ -377,7 +377,7 @@ TEST_F(IceFunctionalityTest, IceAgentAddRemoteCandidateUnitTest)
     EXPECT_EQ(2, iceCandidateCount);
 
     iceAgent.iceAgentState = ICE_AGENT_STATE_CHECK_CONNECTION;
-    EXPECT_EQ(STATUS_SUCCESS, iceAgentAddRemoteCandidate(&iceAgent, relayCandidateStr));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_addRemoteCandidate(&iceAgent, relayCandidateStr));
     EXPECT_EQ(STATUS_SUCCESS, doubleListGetNodeCount(iceAgent.remoteCandidates, &remoteCandidateCount));
     EXPECT_EQ(3, remoteCandidateCount);
     // candidate pair formed
@@ -410,14 +410,14 @@ TEST_F(IceFunctionalityTest, IceAgentFindCandidateWithIpUnitTest)
     MEMSET(&candidateList, 0x00, SIZEOF(DoubleList));
     MEMSET(&ipAddress, 0x00, SIZEOF(KvsIpAddress));
 
-    EXPECT_NE(STATUS_SUCCESS, findCandidateWithIp(NULL, NULL, NULL));
-    EXPECT_NE(STATUS_SUCCESS, findCandidateWithIp(&ipAddress, NULL, NULL));
-    EXPECT_NE(STATUS_SUCCESS, findCandidateWithIp(&ipAddress, &candidateList, NULL));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_findCandidateByIp(NULL, NULL, NULL));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_findCandidateByIp(&ipAddress, NULL, NULL));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_findCandidateByIp(&ipAddress, &candidateList, NULL));
 
     EXPECT_EQ(1, inet_pton(AF_INET, (PCHAR) "127.0.0.1", &ipAddress.address));
     ipAddress.port = 123;
     ipAddress.family = KVS_IP_FAMILY_TYPE_IPV4;
-    EXPECT_EQ(STATUS_SUCCESS, findCandidateWithIp(&ipAddress, &candidateList, &pIceCandidate));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_findCandidateByIp(&ipAddress, &candidateList, &pIceCandidate));
     // nothing is found when candidate list is empty
     EXPECT_EQ(NULL, pIceCandidate);
 
@@ -425,24 +425,24 @@ TEST_F(IceFunctionalityTest, IceAgentFindCandidateWithIpUnitTest)
     EXPECT_EQ(STATUS_SUCCESS, doubleListInsertItemHead(&candidateList, (UINT64) &candidateInList));
 
     ipAddress.family = KVS_IP_FAMILY_TYPE_IPV6;
-    EXPECT_EQ(STATUS_SUCCESS, findCandidateWithIp(&ipAddress, &candidateList, &pIceCandidate));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_findCandidateByIp(&ipAddress, &candidateList, &pIceCandidate));
     // family not match
     EXPECT_EQ(NULL, pIceCandidate);
 
     ipAddress.family = KVS_IP_FAMILY_TYPE_IPV4;
     EXPECT_EQ(1, inet_pton(AF_INET, (PCHAR) "127.0.0.2", &ipAddress.address));
-    EXPECT_EQ(STATUS_SUCCESS, findCandidateWithIp(&ipAddress, &candidateList, &pIceCandidate));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_findCandidateByIp(&ipAddress, &candidateList, &pIceCandidate));
     // address not match
     EXPECT_EQ(NULL, pIceCandidate);
 
     EXPECT_EQ(1, inet_pton(AF_INET, (PCHAR) "127.0.0.1", &ipAddress.address));
     ipAddress.port = 124;
-    EXPECT_EQ(STATUS_SUCCESS, findCandidateWithIp(&ipAddress, &candidateList, &pIceCandidate));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_findCandidateByIp(&ipAddress, &candidateList, &pIceCandidate));
     // port not match
     EXPECT_EQ(NULL, pIceCandidate);
 
     ipAddress.port = 123;
-    EXPECT_EQ(STATUS_SUCCESS, findCandidateWithIp(&ipAddress, &candidateList, &pIceCandidate));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_findCandidateByIp(&ipAddress, &candidateList, &pIceCandidate));
     // everything match
     EXPECT_EQ(&candidateInList, pIceCandidate);
 
@@ -460,22 +460,22 @@ TEST_F(IceFunctionalityTest, IceAgentFindCandidateWithConnectionHandleUnitTest)
     MEMSET(&socketConnection1, 0x00, SIZEOF(SocketConnection));
     MEMSET(&socketConnection2, 0x00, SIZEOF(SocketConnection));
 
-    EXPECT_NE(STATUS_SUCCESS, findCandidateWithSocketConnection(NULL, NULL, NULL));
-    EXPECT_NE(STATUS_SUCCESS, findCandidateWithSocketConnection(&socketConnection1, NULL, NULL));
-    EXPECT_NE(STATUS_SUCCESS, findCandidateWithSocketConnection(&socketConnection1, &candidateList, NULL));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_findCandidateBySocketConnection(NULL, NULL, NULL));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_findCandidateBySocketConnection(&socketConnection1, NULL, NULL));
+    EXPECT_NE(STATUS_SUCCESS, ice_agent_findCandidateBySocketConnection(&socketConnection1, &candidateList, NULL));
 
-    EXPECT_EQ(STATUS_SUCCESS, findCandidateWithSocketConnection(&socketConnection1, &candidateList, &pIceCandidate));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_findCandidateBySocketConnection(&socketConnection1, &candidateList, &pIceCandidate));
     // nothing is found when candidate list is empty
     EXPECT_EQ(NULL, pIceCandidate);
 
     candidateInList.pSocketConnection = &socketConnection1;
     EXPECT_EQ(STATUS_SUCCESS, doubleListInsertItemHead(&candidateList, (UINT64) &candidateInList));
 
-    EXPECT_EQ(STATUS_SUCCESS, findCandidateWithSocketConnection(&socketConnection2, &candidateList, &pIceCandidate));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_findCandidateBySocketConnection(&socketConnection2, &candidateList, &pIceCandidate));
     // no matching socket connection
     EXPECT_EQ(NULL, pIceCandidate);
 
-    EXPECT_EQ(STATUS_SUCCESS, findCandidateWithSocketConnection(&socketConnection1, &candidateList, &pIceCandidate));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_findCandidateBySocketConnection(&socketConnection1, &candidateList, &pIceCandidate));
     // found matching socket connection
     EXPECT_EQ(&candidateInList, pIceCandidate);
 
@@ -678,9 +678,9 @@ TEST_F(IceFunctionalityTest, IceAgentCandidateGatheringTest)
     EXPECT_EQ(STATUS_SUCCESS, connection_listener_create(&pConnectionListener));
     EXPECT_EQ(STATUS_SUCCESS, timerQueueCreate(&timerQueueHandle));
     EXPECT_EQ(STATUS_SUCCESS,
-              createIceAgent(localIceUfrag, localIcePwd, &iceAgentCallbacks, &configuration, timerQueueHandle, pConnectionListener, &pIceAgent));
+              ice_agent_create(localIceUfrag, localIcePwd, &iceAgentCallbacks, &configuration, timerQueueHandle, pConnectionListener, &pIceAgent));
 
-    EXPECT_EQ(STATUS_SUCCESS, iceAgentStartGathering(pIceAgent));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_gather(pIceAgent));
 
     THREAD_SLEEP(KVS_ICE_GATHER_REFLEXIVE_AND_RELAYED_CANDIDATE_TIMEOUT + 2 * HUNDREDS_OF_NANOS_IN_A_SECOND);
 
@@ -701,9 +701,9 @@ TEST_F(IceFunctionalityTest, IceAgentCandidateGatheringTest)
     candidateList.lock.unlock();
 
     EXPECT_TRUE(foundHostCandidate && foundSrflxCandidate && foundRelayCandidate);
-    EXPECT_EQ(STATUS_SUCCESS, iceAgentShutdown(pIceAgent));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_shutdown(pIceAgent));
     EXPECT_EQ(STATUS_SUCCESS, timerQueueShutdown(timerQueueHandle));
-    EXPECT_EQ(STATUS_SUCCESS, freeIceAgent(&pIceAgent));
+    EXPECT_EQ(STATUS_SUCCESS, ice_agent_free(&pIceAgent));
     EXPECT_EQ(STATUS_SUCCESS, timerQueueFree(&timerQueueHandle));
 
     deinitializeSignalingClient();
