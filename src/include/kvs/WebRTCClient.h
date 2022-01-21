@@ -1086,7 +1086,7 @@ PUBLIC_API STATUS createPeerConnection(PRtcConfiguration, PRtcPeerConnection*);
  *
  * @return STATUS code of the execution. STATUS_SUCCESS on success
  */
-PUBLIC_API STATUS freePeerConnection(PRtcPeerConnection* ppPeerConnection);
+PUBLIC_API STATUS peer_connection_free(PRtcPeerConnection* ppPeerConnection);
 
 /**
  * @brief Set a callback when new Ice collects new local candidate.
@@ -1316,7 +1316,7 @@ PUBLIC_API STATUS transceiverOnPictureLoss(PRtcRtpTransceiver, UINT64, RtcOnPict
 /**
  * @brief Frees the previously created transceiver object
  *
- * This method is currently a no-op as Transceivers are freed when freePeerConnection is called
+ * This method is currently a no-op as Transceivers are freed when peer_connection_free is called
  * in the future when renegotiation is supported this will be useful to remove Transceivers at anytime
  *
  * @param[in,out/opt] PRtcRtpTransceiver* in,out/OPT RtcRtpTransceiver to be freed

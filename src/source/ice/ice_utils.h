@@ -1,6 +1,17 @@
-/*******************************************
-Ice Utils internal include file
-*******************************************/
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
 #ifndef __KINESIS_VIDEO_WEBRTC_ICE_UTILS__
 #define __KINESIS_VIDEO_WEBRTC_ICE_UTILS__
 
@@ -9,11 +20,16 @@ Ice Utils internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
 #include "stun.h"
 #include "network.h"
 #include "socket_connection.h"
 
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
 // #TBD, need to review this design.
 #define DEFAULT_MAX_STORED_TRANSACTION_ID_COUNT 20
 #define MAX_STORED_TRANSACTION_ID_COUNT         100
@@ -40,6 +56,10 @@ typedef struct {
     UINT32 transactionIdCount;
     PBYTE transactionIds; //!< the buffer of transaction.
 } TransactionIdStore, *PTransactionIdStore;
+
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 /**
  * @brief create the buffer recording the transaction id.
  *          For current design, ice agent, ice candidate pair, and turn will create one transaction id buffer.

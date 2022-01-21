@@ -168,9 +168,9 @@ STATUS handleOffer(PSampleConfiguration pSampleConfiguration, PSampleStreamingSe
             THREAD_CREATE(&pSampleConfiguration->audioSenderTid, pSampleConfiguration->audioSource, (PVOID) pSampleConfiguration);
         }
 
-        if ((retStatus = timerQueueAddTimer(pSampleConfiguration->timerQueueHandle, SAMPLE_STATS_DURATION, SAMPLE_STATS_DURATION,
-                                            getIceCandidatePairStatsCallback, (UINT64) pSampleConfiguration,
-                                            &pSampleConfiguration->iceCandidatePairStatsTimerId)) != STATUS_SUCCESS) {
+        if ((retStatus = timer_queue_addTimer(pSampleConfiguration->timerQueueHandle, SAMPLE_STATS_DURATION, SAMPLE_STATS_DURATION,
+                                              getIceCandidatePairStatsCallback, (UINT64) pSampleConfiguration,
+                                              &pSampleConfiguration->iceCandidatePairStatsTimerId)) != STATUS_SUCCESS) {
             DLOGW("Failed to add getIceCandidatePairStatsCallback to add to timer queue (code 0x%08x). Cannot pull ice candidate pair metrics "
                   "periodically",
                   retStatus);
@@ -494,7 +494,7 @@ STATUS freeSampleStreamingSession(PSampleStreamingSession* ppSampleStreamingSess
         THREAD_JOIN(pSampleStreamingSession->receiveAudioVideoSenderTid, NULL);
     }
     CHK_LOG_ERR(closePeerConnection(pSampleStreamingSession->pPeerConnection));
-    CHK_LOG_ERR(freePeerConnection(&pSampleStreamingSession->pPeerConnection));
+    CHK_LOG_ERR(peer_connection_free(&pSampleStreamingSession->pPeerConnection));
     SAFE_MEMFREE(pSampleStreamingSession);
 
 CleanUp:
@@ -912,12 +912,12 @@ STATUS freeSampleConfiguration(PSampleConfiguration* ppSampleConfiguration)
     freeStaticCredentialProvider(&pSampleConfiguration->pCredentialProvider);
 
     if (pSampleConfiguration->iceCandidatePairStatsTimerId != MAX_UINT32) {
-        CHK_STATUS(timerQueueCancelTimer(pSampleConfiguration->timerQueueHandle, pSampleConfiguration->iceCandidatePairStatsTimerId,
-                                         (UINT64) pSampleConfiguration));
+        CHK_STATUS(timer_queue_cancelTimer(pSampleConfiguration->timerQueueHandle, pSampleConfiguration->iceCandidatePairStatsTimerId,
+                                           (UINT64) pSampleConfiguration));
         pSampleConfiguration->iceCandidatePairStatsTimerId = MAX_UINT32;
     }
     if (IS_VALID_TIMER_QUEUE_HANDLE(pSampleConfiguration->timerQueueHandle)) {
-        timerQueueFree(&pSampleConfiguration->timerQueueHandle);
+        timer_queue_free(&pSampleConfiguration->timerQueueHandle);
     }
 
     MEMFREE(*ppSampleConfiguration);

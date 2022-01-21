@@ -84,8 +84,8 @@ TEST_F(DataChannelFunctionalityTest, createDataChannel_Disconnected)
 
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 
     ASSERT_EQ(ATOMIC_LOAD(&datachannelLocalOpenCount), 2);
     ASSERT_EQ(ATOMIC_LOAD(&msgCount), 2);
@@ -162,8 +162,8 @@ TEST_F(DataChannelFunctionalityTest, dataChannelSendRecvMessageAfterDtlsComplete
 
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 TEST_F(DataChannelFunctionalityTest, createDataChannel_PartialReliabilityUnorderedMaxPacketLifeTimeParameterSet)
@@ -247,8 +247,8 @@ TEST_F(DataChannelFunctionalityTest, createDataChannel_PartialReliabilityUnorder
     ASSERT_EQ(pSctpSession->spa.sendv_prinfo.pr_policy, SCTP_PR_SCTP_TTL);
     ASSERT_EQ(pSctpSession->spa.sendv_prinfo.pr_value, rtcDataChannelInit.maxPacketLifeTime.value);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 TEST_F(DataChannelFunctionalityTest, createDataChannel_PartialReliabilityUnOrderedMaxRetransmitsParameterSet)
@@ -333,8 +333,8 @@ TEST_F(DataChannelFunctionalityTest, createDataChannel_PartialReliabilityUnOrder
     ASSERT_EQ(pSctpSession->spa.sendv_prinfo.pr_policy, SCTP_PR_SCTP_RTX);
     ASSERT_EQ(pSctpSession->spa.sendv_prinfo.pr_value, rtcDataChannelInit.maxRetransmits.value);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 TEST_F(DataChannelFunctionalityTest, createDataChannel_PartialReliabilityOrderedMaxPacketLifeTimeParameterSet)
@@ -419,8 +419,8 @@ TEST_F(DataChannelFunctionalityTest, createDataChannel_PartialReliabilityOrdered
     ASSERT_EQ(pSctpSession->spa.sendv_prinfo.pr_policy, SCTP_PR_SCTP_TTL);
     ASSERT_EQ(pSctpSession->spa.sendv_prinfo.pr_value, rtcDataChannelInit.maxPacketLifeTime.value);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 TEST_F(DataChannelFunctionalityTest, createDataChannel_PartialReliabilityOrderedMaxRetransmitsParameterSet)
@@ -504,8 +504,8 @@ TEST_F(DataChannelFunctionalityTest, createDataChannel_PartialReliabilityOrdered
     ASSERT_EQ(pSctpSession->spa.sendv_prinfo.pr_policy, SCTP_PR_SCTP_RTX);
     ASSERT_EQ(pSctpSession->spa.sendv_prinfo.pr_value, rtcDataChannelInit.maxRetransmits.value);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 TEST_F(DataChannelFunctionalityTest, createDataChannel_DataChannelMetricsTest)
@@ -586,8 +586,8 @@ TEST_F(DataChannelFunctionalityTest, createDataChannel_DataChannelMetricsTest)
 
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 } // namespace webrtcclient

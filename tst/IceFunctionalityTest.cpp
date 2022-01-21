@@ -702,9 +702,9 @@ TEST_F(IceFunctionalityTest, IceAgentCandidateGatheringTest)
 
     EXPECT_TRUE(foundHostCandidate && foundSrflxCandidate && foundRelayCandidate);
     EXPECT_EQ(STATUS_SUCCESS, ice_agent_shutdown(pIceAgent));
-    EXPECT_EQ(STATUS_SUCCESS, timerQueueShutdown(timerQueueHandle));
+    EXPECT_EQ(STATUS_SUCCESS, timer_queue_shutdown(timerQueueHandle));
     EXPECT_EQ(STATUS_SUCCESS, ice_agent_free(&pIceAgent));
-    EXPECT_EQ(STATUS_SUCCESS, timerQueueFree(&timerQueueHandle));
+    EXPECT_EQ(STATUS_SUCCESS, timer_queue_free(&timerQueueHandle));
 
     deinitializeSignalingClient();
 }

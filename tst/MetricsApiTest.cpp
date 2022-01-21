@@ -37,7 +37,7 @@ TEST_F(MetricsApiTest, webRtcGetMetrics)
     EXPECT_EQ(STATUS_SUCCESS, rtcPeerConnectionGetMetrics(pRtcPeerConnection, NULL, &rtcMetrics));
 
     EXPECT_EQ(STATUS_SUCCESS, closePeerConnection(pRtcPeerConnection));
-    EXPECT_EQ(STATUS_SUCCESS, freePeerConnection(&pRtcPeerConnection));
+    EXPECT_EQ(STATUS_SUCCESS, peer_connection_free(&pRtcPeerConnection));
 }
 
 TEST_F(MetricsApiTest, webRtcIceServerGetMetrics)
@@ -75,7 +75,7 @@ TEST_F(MetricsApiTest, webRtcIceServerGetMetrics)
     EXPECT_PRED_FORMAT2(testing::IsSubstring, "transport=tcp", rtcIceMetrics.rtcStatsObject.iceServerStats.protocol);
 
     EXPECT_EQ(STATUS_SUCCESS, closePeerConnection(pRtcPeerConnection));
-    EXPECT_EQ(STATUS_SUCCESS, freePeerConnection(&pRtcPeerConnection));
+    EXPECT_EQ(STATUS_SUCCESS, peer_connection_free(&pRtcPeerConnection));
 }
 
 TEST_F(MetricsApiTest, webRtcIceCandidateGetMetrics)
@@ -148,7 +148,7 @@ TEST_F(MetricsApiTest, webRtcIceCandidateGetMetrics)
     EXPECT_PRED_FORMAT2(testing::IsSubstring, "", rtcIceMetrics.rtcStatsObject.remoteIceCandidateStats.protocol);
 
     EXPECT_EQ(STATUS_SUCCESS, closePeerConnection(pRtcPeerConnection));
-    EXPECT_EQ(STATUS_SUCCESS, freePeerConnection(&pRtcPeerConnection));
+    EXPECT_EQ(STATUS_SUCCESS, peer_connection_free(&pRtcPeerConnection));
 }
 
 } // namespace webrtcclient

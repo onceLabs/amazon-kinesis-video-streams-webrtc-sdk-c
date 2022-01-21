@@ -83,7 +83,7 @@ TEST_F(PeerConnectionApiTest, suppliedCertificatesVariation)
     configuration.certificates[0].pPrivateKey = NULL;
     configuration.certificates[0].privateKeySize = 1;
     EXPECT_EQ(STATUS_SUCCESS, createPeerConnection(&configuration, &pRtcPeerConnection));
-    EXPECT_EQ(STATUS_SUCCESS, freePeerConnection(&pRtcPeerConnection));
+    EXPECT_EQ(STATUS_SUCCESS, peer_connection_free(&pRtcPeerConnection));
 
     // Bad private key size later in the chain with cert size not zero that should be ignored
     configuration.certificates[0].pCertificate = NULL;
@@ -91,7 +91,7 @@ TEST_F(PeerConnectionApiTest, suppliedCertificatesVariation)
     configuration.certificates[0].pPrivateKey = NULL;
     configuration.certificates[0].privateKeySize = 1;
     EXPECT_EQ(STATUS_SUCCESS, createPeerConnection(&configuration, &pRtcPeerConnection));
-    EXPECT_EQ(STATUS_SUCCESS, freePeerConnection(&pRtcPeerConnection));
+    EXPECT_EQ(STATUS_SUCCESS, peer_connection_free(&pRtcPeerConnection));
 }
 
 TEST_F(PeerConnectionApiTest, deserializeSessionDescriptionInit)

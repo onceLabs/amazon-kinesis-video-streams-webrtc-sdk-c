@@ -390,9 +390,9 @@ STATUS ice_agent_populateSdpMediaDescriptionCandidates(PIceAgent, PSdpMediaDescr
  * IceAgent is ready to be freed. User should stop calling ice_agent_send after ice_agent_shutdown returns.
  * ice_agent_shutdown is idempotent.
  *
- * @param[in] PIceAgent IceAgent object
+ * @param[in] PIceAgent IceAgent object.
  *
- * @return STATUS status of execution
+ * @return STATUS status of execution.
  */
 STATUS ice_agent_shutdown(PIceAgent);
 

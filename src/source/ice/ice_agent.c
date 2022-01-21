@@ -1156,9 +1156,9 @@ STATUS ice_agent_start(PIceAgent pIceAgent, PCHAR remoteUsername, PCHAR remotePa
     MUTEX_UNLOCK(pIceAgent->lock);
     locked = FALSE;
     // try to advance the fsm of ice agent every 50ms.
-    CHK_STATUS(timerQueueAddTimer(pIceAgent->timerQueueHandle, KVS_ICE_FSM_TIMER_START_DELAY,
-                                  pIceAgent->kvsRtcConfiguration.iceConnectionCheckPollingInterval, iceAgentFsmTimerCallback, (UINT64) pIceAgent,
-                                  &pIceAgent->iceAgentStateTimerTask));
+    CHK_STATUS(timer_queue_addTimer(pIceAgent->timerQueueHandle, KVS_ICE_FSM_TIMER_START_DELAY,
+                                    pIceAgent->kvsRtcConfiguration.iceConnectionCheckPollingInterval, iceAgentFsmTimerCallback, (UINT64) pIceAgent,
+                                    &pIceAgent->iceAgentStateTimerTask));
 
 CleanUp:
 
@@ -1306,8 +1306,8 @@ STATUS ice_agent_gather(PIceAgent pIceAgent)
 
     pIceAgent->candidateGatheringEndTime = GETTIME() + pIceAgent->kvsRtcConfiguration.iceLocalCandidateGatheringTimeout;
 
-    CHK_STATUS(timerQueueAddTimer(pIceAgent->timerQueueHandle, KVS_ICE_GATHERING_TIMER_START_DELAY, KVS_ICE_GATHER_CANDIDATE_TIMER_POLLING_INTERVAL,
-                                  iceAgentGatheringTimerCallback, (UINT64) pIceAgent, &pIceAgent->iceCandidateGatheringTimerTask));
+    CHK_STATUS(timer_queue_addTimer(pIceAgent->timerQueueHandle, KVS_ICE_GATHERING_TIMER_START_DELAY, KVS_ICE_GATHER_CANDIDATE_TIMER_POLLING_INTERVAL,
+                                    iceAgentGatheringTimerCallback, (UINT64) pIceAgent, &pIceAgent->iceCandidateGatheringTimerTask));
 
 CleanUp:
 
@@ -1335,17 +1335,17 @@ STATUS ice_agent_shutdown(PIceAgent pIceAgent)
     CHK(!ATOMIC_EXCHANGE_BOOL(&pIceAgent->shutdown, TRUE), retStatus);
 
     if (pIceAgent->iceAgentStateTimerTask != MAX_UINT32) {
-        CHK_STATUS(timerQueueCancelTimer(pIceAgent->timerQueueHandle, pIceAgent->iceAgentStateTimerTask, (UINT64) pIceAgent));
+        CHK_STATUS(timer_queue_cancelTimer(pIceAgent->timerQueueHandle, pIceAgent->iceAgentStateTimerTask, (UINT64) pIceAgent));
         pIceAgent->iceAgentStateTimerTask = MAX_UINT32;
     }
 
     if (pIceAgent->keepAliveTimerTask != MAX_UINT32) {
-        CHK_STATUS(timerQueueCancelTimer(pIceAgent->timerQueueHandle, pIceAgent->keepAliveTimerTask, (UINT64) pIceAgent));
+        CHK_STATUS(timer_queue_cancelTimer(pIceAgent->timerQueueHandle, pIceAgent->keepAliveTimerTask, (UINT64) pIceAgent));
         pIceAgent->keepAliveTimerTask = MAX_UINT32;
     }
 
     if (pIceAgent->iceCandidateGatheringTimerTask != MAX_UINT32) {
-        CHK_STATUS(timerQueueCancelTimer(pIceAgent->timerQueueHandle, pIceAgent->iceCandidateGatheringTimerTask, (UINT64) pIceAgent));
+        CHK_STATUS(timer_queue_cancelTimer(pIceAgent->timerQueueHandle, pIceAgent->iceCandidateGatheringTimerTask, (UINT64) pIceAgent));
         pIceAgent->iceCandidateGatheringTimerTask = MAX_UINT32;
     }
 
@@ -1424,17 +1424,17 @@ STATUS ice_agent_restart(PIceAgent pIceAgent, PCHAR localIceUfrag, PCHAR localIc
     CHK(!alreadyRestarting, retStatus);
 
     if (pIceAgent->iceAgentStateTimerTask != MAX_UINT32) {
-        CHK_STATUS(timerQueueCancelTimer(pIceAgent->timerQueueHandle, pIceAgent->iceAgentStateTimerTask, (UINT64) pIceAgent));
+        CHK_STATUS(timer_queue_cancelTimer(pIceAgent->timerQueueHandle, pIceAgent->iceAgentStateTimerTask, (UINT64) pIceAgent));
         pIceAgent->iceAgentStateTimerTask = MAX_UINT32;
     }
 
     if (pIceAgent->keepAliveTimerTask != MAX_UINT32) {
-        CHK_STATUS(timerQueueCancelTimer(pIceAgent->timerQueueHandle, pIceAgent->keepAliveTimerTask, (UINT64) pIceAgent));
+        CHK_STATUS(timer_queue_cancelTimer(pIceAgent->timerQueueHandle, pIceAgent->keepAliveTimerTask, (UINT64) pIceAgent));
         pIceAgent->keepAliveTimerTask = MAX_UINT32;
     }
 
     if (pIceAgent->iceCandidateGatheringTimerTask != MAX_UINT32) {
-        CHK_STATUS(timerQueueCancelTimer(pIceAgent->timerQueueHandle, pIceAgent->iceCandidateGatheringTimerTask, (UINT64) pIceAgent));
+        CHK_STATUS(timer_queue_cancelTimer(pIceAgent->timerQueueHandle, pIceAgent->iceCandidateGatheringTimerTask, (UINT64) pIceAgent));
         pIceAgent->iceCandidateGatheringTimerTask = MAX_UINT32;
     }
 
@@ -1691,8 +1691,8 @@ STATUS iceAgentSetupFsmConnected(PIceAgent pIceAgent)
     }
 
     // schedule sending keep alive
-    CHK_STATUS(timerQueueAddTimer(pIceAgent->timerQueueHandle, KVS_ICE_DEFAULT_TIMER_START_DELAY, KVS_ICE_SEND_KEEP_ALIVE_INTERVAL,
-                                  iceAgentKeepAliveTimerCallback, (UINT64) pIceAgent, &pIceAgent->keepAliveTimerTask));
+    CHK_STATUS(timer_queue_addTimer(pIceAgent->timerQueueHandle, KVS_ICE_DEFAULT_TIMER_START_DELAY, KVS_ICE_SEND_KEEP_ALIVE_INTERVAL,
+                                    iceAgentKeepAliveTimerCallback, (UINT64) pIceAgent, &pIceAgent->keepAliveTimerTask));
 
 CleanUp:
 

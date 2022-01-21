@@ -25,8 +25,8 @@ TEST_F(PeerConnectionFunctionalityTest, connectTwoPeers)
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 TEST_F(PeerConnectionFunctionalityTest, connectTwoPeersWithDelay)
@@ -86,8 +86,8 @@ TEST_F(PeerConnectionFunctionalityTest, connectTwoPeersWithDelay)
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 #ifdef KVS_USE_OPENSSL
@@ -134,8 +134,8 @@ TEST_F(PeerConnectionFunctionalityTest, connectTwoPeersWithPresetCerts)
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 #elif KVS_USE_MBEDTLS
 TEST_F(PeerConnectionFunctionalityTest, connectTwoPeersWithPresetCerts)
@@ -181,8 +181,8 @@ TEST_F(PeerConnectionFunctionalityTest, connectTwoPeersWithPresetCerts)
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 #endif
 
@@ -210,8 +210,8 @@ TEST_F(PeerConnectionFunctionalityTest, connectTwoPeersForcedTURN)
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 
     deinitializeSignalingClient();
 }
@@ -271,8 +271,8 @@ TEST_F(PeerConnectionFunctionalityTest, shutdownTurnDueToP2PFoundBeforeTurnEstab
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 
     deinitializeSignalingClient();
 }
@@ -378,8 +378,8 @@ TEST_F(PeerConnectionFunctionalityTest, shutdownTurnDueToP2PFoundAfterTurnEstabl
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 
     deinitializeSignalingClient();
 }
@@ -403,8 +403,8 @@ TEST_F(PeerConnectionFunctionalityTest, connectTwoPeersWithHostAndStun)
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 // Assert that two PeerConnections can connect and then terminate one of them, the other one will eventually report disconnection
@@ -426,7 +426,7 @@ TEST_F(PeerConnectionFunctionalityTest, connectTwoPeersThenDisconnectTest)
     EXPECT_EQ(connectTwoPeers(offerPc, answerPc), TRUE);
 
     // free offerPc so it wont send anymore keep alives and answerPc will detect disconnection
-    freePeerConnection(&offerPc);
+    peer_connection_free(&offerPc);
 
     THREAD_SLEEP(KVS_ICE_ENTER_STATE_DISCONNECTION_GRACE_PERIOD);
 
@@ -440,7 +440,7 @@ TEST_F(PeerConnectionFunctionalityTest, connectTwoPeersThenDisconnectTest)
 
     EXPECT_TRUE(ATOMIC_LOAD(&stateChangeCount[RTC_PEER_CONNECTION_STATE_DISCONNECTED]) > 0);
 
-    freePeerConnection(&answerPc);
+    peer_connection_free(&answerPc);
 }
 
 // Assert that PeerConnection will go to failed state when no turn server was given in turn only mode.
@@ -464,8 +464,8 @@ TEST_F(PeerConnectionFunctionalityTest, connectTwoPeersExpectFailureBecauseNoCan
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 // Assert that two PeerConnections can connect and then send media until the receiver gets both audio/video
@@ -534,8 +534,8 @@ TEST_F(PeerConnectionFunctionalityTest, exchangeMedia)
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 
     EXPECT_EQ(ATOMIC_LOAD(&seenVideo), 1);
 }
@@ -592,8 +592,8 @@ TEST_F(PeerConnectionFunctionalityTest, exchangeMediaRSA)
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 
     EXPECT_EQ(ATOMIC_LOAD(&seenVideo), 1);
 }
@@ -620,8 +620,8 @@ TEST_F(PeerConnectionFunctionalityTest, iceRestartTest)
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 }
 
 TEST_F(PeerConnectionFunctionalityTest, iceRestartTestForcedTurn)
@@ -654,8 +654,8 @@ TEST_F(PeerConnectionFunctionalityTest, iceRestartTestForcedTurn)
     closePeerConnection(offerPc);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 
     deinitializeSignalingClient();
 }
@@ -683,8 +683,8 @@ TEST_F(PeerConnectionFunctionalityTest, peerConnectionOfferCloseConnection)
     EXPECT_EQ(ATOMIC_LOAD(&stateChangeCount[RTC_PEER_CONNECTION_STATE_CLOSED]), 2);
     closePeerConnection(answerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 
     deinitializeSignalingClient();
 }
@@ -712,8 +712,8 @@ TEST_F(PeerConnectionFunctionalityTest, peerConnectionAnswerCloseConnection)
     EXPECT_EQ(stateChangeCount[RTC_PEER_CONNECTION_STATE_CLOSED], 2);
     closePeerConnection(offerPc);
 
-    freePeerConnection(&offerPc);
-    freePeerConnection(&answerPc);
+    peer_connection_free(&offerPc);
+    peer_connection_free(&answerPc);
 
     deinitializeSignalingClient();
 }
@@ -784,11 +784,11 @@ TEST_F(PeerConnectionFunctionalityTest, DISABLED_exchangeMediaThroughTurnRandomS
 
             ATOMIC_STORE_BOOL(&offerStopVideo, TRUE);
             offerSendVideoWorker.join();
-            freePeerConnection(&offerPc);
+            peer_connection_free(&offerPc);
 
             ATOMIC_STORE_BOOL(&answerStopVideo, TRUE);
             answerSendVideoWorker.join();
-            freePeerConnection(&answerPc);
+            peer_connection_free(&answerPc);
 
             if (expectSeenVideo) {
                 EXPECT_EQ(ATOMIC_LOAD_BOOL(&offerSeenVideo), TRUE);

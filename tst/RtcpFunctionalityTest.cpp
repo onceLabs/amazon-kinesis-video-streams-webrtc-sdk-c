@@ -167,7 +167,7 @@ TEST_F(RtcpFunctionalityTest, onRtcpPacketCompoundNack)
     ASSERT_EQ(1, stats.nackCount);
     ASSERT_EQ(1, stats.retransmittedPacketsSent);
     ASSERT_EQ(10, stats.retransmittedBytesSent);
-    freePeerConnection(&pRtcPeerConnection);
+    peer_connection_free(&pRtcPeerConnection);
     freeRtpPacket(&pRtpPacket);
 }
 
@@ -204,7 +204,7 @@ TEST_F(RtcpFunctionalityTest, onRtcpPacketCompoundSenderReport)
     EXPECT_EQ(4.0 / 255.0, stats.fractionLost);
     EXPECT_LT(0, stats.totalRoundTripTime);
     EXPECT_LT(0, stats.roundTripTime);
-    freePeerConnection(&pRtcPeerConnection);
+    peer_connection_free(&pRtcPeerConnection);
 }
 
 TEST_F(RtcpFunctionalityTest, rembValueGet)
@@ -271,7 +271,7 @@ TEST_F(RtcpFunctionalityTest, onRtcpRembCalled)
     onRtcpRembPacket(&rtcpPacket, pKvsPeerConnection);
     ASSERT_TRUE(onBandwidthCalled42);
     ASSERT_FALSE(onBandwidthCalled43);
-    freePeerConnection(&pRtcPeerConnection);
+    peer_connection_free(&pRtcPeerConnection);
 }
 
 TEST_F(RtcpFunctionalityTest, onpli)
@@ -293,7 +293,7 @@ TEST_F(RtcpFunctionalityTest, onpli)
     RtcOutboundRtpStreamStats stats{};
     EXPECT_EQ(STATUS_SUCCESS, getRtpOutboundStats(pRtcPeerConnection, nullptr, &stats));
     EXPECT_EQ(1, stats.pliCount);
-    freePeerConnection(&pRtcPeerConnection);
+    peer_connection_free(&pRtcPeerConnection);
 }
 
 } // namespace webrtcclient

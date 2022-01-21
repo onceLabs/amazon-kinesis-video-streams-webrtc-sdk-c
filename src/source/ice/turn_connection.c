@@ -328,11 +328,19 @@ static PTurnPeer turn_connection_getPeerByChannelNum(PTurnConnection pTurnConnec
 
     return pTurnPeer;
 }
-
-/*
- * turn_connection_handleTcpChannelData will process a single turn channel data item from pBuffer then return.
- * If there is a complete channel data item in buffer, upon return *pTurnChannelDataCount will be 1, *pTurnChannelData
- * will data details about the parsed channel data. *pProcessedDataLen will be the length of data processed.
+/**
+ * @brief turn_connection_handleTcpChannelData will process a single turn channel data item from pBuffer then return. If there is a complete channel
+ * data item in buffer, upon return *pTurnChannelDataCount will be 1, *pTurnChannelData will data details about the parsed channel data.
+ * *pProcessedDataLen will be the length of data processed.
+ *
+ * @param[in] pTurnConnection
+ * @param[in] pBuffer
+ * @param[in] bufferLen
+ * @param[in] pChannelData
+ * @param[in] pTurnChannelDataCount
+ * @param[in] pProcessedDataLen
+ *
+ * @return STATUS status of execution.
  */
 static STATUS turn_connection_handleTcpChannelData(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen, PTurnChannelData pChannelData,
                                                    PUINT32 pTurnChannelDataCount, PUINT32 pProcessedDataLen)
@@ -435,7 +443,18 @@ CleanUp:
     LEAVES();
     return retStatus;
 }
-
+/**
+ * @brief
+ *
+ * @param[in] pTurnConnection the context of the turn connection.
+ * @param[in] pBuffer
+ * @param[in] bufferLen
+ * @param[in] pChannelData
+ * @param[in] pTurnChannelDataCount
+ * @param[in] pProcessedDataLen
+ *
+ * @return STATUS status of execution.
+ */
 static STATUS turn_connection_handleChannelData(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen, PTurnChannelData pChannelData,
                                                 PUINT32 pChannelDataCount, PUINT32 pProcessedDataLen)
 {
@@ -908,7 +927,7 @@ STATUS turn_connection_create(PIceServer pTurnServer, TIMER_QUEUE_HANDLE timerQu
     pTurnConnection->pTurnChannelBindPacket = NULL;
     pTurnConnection->pConnectionListener = pConnectionListener;
     pTurnConnection->dataTransferMode =
-        TURN_CONNECTION_DATA_TRANSFER_MODE_DATA_CHANNEL; // only TURN_CONNECTION_DATA_TRANSFER_MODE_DATA_CHANNEL for now
+        TURN_CONNECTION_DATA_TRANSFER_MODE_DATA_CHANNEL; //!< only TURN_CONNECTION_DATA_TRANSFER_MODE_DATA_CHANNEL for now
     pTurnConnection->protocol = protocol;
     pTurnConnection->relayAddressReported = FALSE;
     pTurnConnection->pControlChannel = pTurnSocket;
@@ -965,7 +984,7 @@ STATUS turn_connection_free(PTurnConnection* ppTurnConnection)
 
     timerCallbackId = ATOMIC_EXCHANGE(&pTurnConnection->timerCallbackId, MAX_UINT32);
     if (timerCallbackId != MAX_UINT32) {
-        CHK_LOG_ERR(timerQueueCancelTimer(pTurnConnection->timerQueueHandle, (UINT32) timerCallbackId, (UINT64) pTurnConnection));
+        CHK_LOG_ERR(timer_queue_cancelTimer(pTurnConnection->timerQueueHandle, (UINT32) timerCallbackId, (UINT64) pTurnConnection));
     }
 
     // shutdown control channel
@@ -1215,12 +1234,12 @@ STATUS turn_connection_start(PTurnConnection pTurnConnection)
 
     timerCallbackId = ATOMIC_EXCHANGE(&pTurnConnection->timerCallbackId, MAX_UINT32);
     if (timerCallbackId != MAX_UINT32) {
-        CHK_STATUS(timerQueueCancelTimer(pTurnConnection->timerQueueHandle, (UINT32) timerCallbackId, (UINT64) pTurnConnection));
+        CHK_STATUS(timer_queue_cancelTimer(pTurnConnection->timerQueueHandle, (UINT32) timerCallbackId, (UINT64) pTurnConnection));
     }
 
     /* schedule the timer, which will drive the state machine. */
-    CHK_STATUS(timerQueueAddTimer(pTurnConnection->timerQueueHandle, KVS_ICE_DEFAULT_TIMER_START_DELAY, pTurnConnection->currentTimerCallingPeriod,
-                                  turn_connection_timerCallback, (UINT64) pTurnConnection, (PUINT32) &timerCallbackId));
+    CHK_STATUS(timer_queue_addTimer(pTurnConnection->timerQueueHandle, KVS_ICE_DEFAULT_TIMER_START_DELAY, pTurnConnection->currentTimerCallingPeriod,
+                                    turn_connection_timerCallback, (UINT64) pTurnConnection, (PUINT32) &timerCallbackId));
 
     ATOMIC_STORE(&pTurnConnection->timerCallbackId, timerCallbackId);
 

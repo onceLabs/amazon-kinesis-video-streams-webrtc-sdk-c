@@ -29,7 +29,7 @@ TEST_F(DataChannelApiTest, createDataChannel_Disconnected)
     EXPECT_EQ(createDataChannel(pPeerConnection, (PCHAR) "DataChannel 2", nullptr, nullptr), STATUS_NULL_ARG);
 
     closePeerConnection(pPeerConnection);
-    freePeerConnection(&pPeerConnection);
+    peer_connection_free(&pPeerConnection);
 }
 
 } // namespace webrtcclient

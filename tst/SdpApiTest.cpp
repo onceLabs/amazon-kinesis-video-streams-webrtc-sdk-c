@@ -299,7 +299,7 @@ TEST_F(SdpApiTest, populateSingleMediaSection_TestTxSendRecv)
     EXPECT_PRED_FORMAT2(testing::IsSubstring, "sendrecv", sessionDescriptionInit.sdp);
 
     closePeerConnection(offerPc);
-    freePeerConnection(&offerPc);
+    peer_connection_free(&offerPc);
 }
 
 TEST_F(SdpApiTest, populateSingleMediaSection_TestTxSendRecvMaxTransceivers)
@@ -338,7 +338,7 @@ TEST_F(SdpApiTest, populateSingleMediaSection_TestTxSendRecvMaxTransceivers)
     EXPECT_EQ(STATUS_SESSION_DESCRIPTION_MAX_MEDIA_COUNT, createOffer(offerPc, &sessionDescriptionInit));
 
     closePeerConnection(offerPc);
-    freePeerConnection(&offerPc);
+    peer_connection_free(&offerPc);
 }
 
 TEST_F(SdpApiTest, populateSingleMediaSection_TestTxSendOnly)
@@ -369,7 +369,7 @@ TEST_F(SdpApiTest, populateSingleMediaSection_TestTxSendOnly)
     EXPECT_PRED_FORMAT2(testing::IsSubstring, "sendonly", sessionDescriptionInit.sdp);
 
     closePeerConnection(offerPc);
-    freePeerConnection(&offerPc);
+    peer_connection_free(&offerPc);
 }
 
 TEST_F(SdpApiTest, populateSingleMediaSection_TestTxRecvOnly)
@@ -400,7 +400,7 @@ TEST_F(SdpApiTest, populateSingleMediaSection_TestTxRecvOnly)
     EXPECT_PRED_FORMAT2(testing::IsSubstring, "recvonly", sessionDescriptionInit.sdp);
 
     closePeerConnection(offerPc);
-    freePeerConnection(&offerPc);
+    peer_connection_free(&offerPc);
 }
 
 TEST_F(SdpApiTest, populateSingleMediaSection_TestPayloadNoFmtp)
@@ -458,7 +458,7 @@ a=rtpmap:102 H264/90000
                             rtcSessionDescriptionInit.sdp);
 
         closePeerConnection(pRtcPeerConnection);
-        freePeerConnection(&pRtcPeerConnection);
+        peer_connection_free(&pRtcPeerConnection);
     });
 }
 
@@ -588,7 +588,7 @@ a=group:BUNDLE 0
         EXPECT_PRED_FORMAT2(testing::IsNotSubstring, "recvonly", answerSdp.sdp);
 
         closePeerConnection(pRtcPeerConnection);
-        EXPECT_EQ(STATUS_SUCCESS, freePeerConnection(&pRtcPeerConnection));
+        EXPECT_EQ(STATUS_SUCCESS, peer_connection_free(&pRtcPeerConnection));
     });
 }
 
@@ -650,7 +650,7 @@ a=group:BUNDLE 0
         EXPECT_PRED_FORMAT2(testing::IsSubstring, "sendrecv", answerSdp.sdp);
 
         closePeerConnection(pRtcPeerConnection);
-        EXPECT_EQ(STATUS_SUCCESS, freePeerConnection(&pRtcPeerConnection));
+        EXPECT_EQ(STATUS_SUCCESS, peer_connection_free(&pRtcPeerConnection));
     });
 }
 
@@ -711,7 +711,7 @@ a=group:BUNDLE 0
         EXPECT_PRED_FORMAT2(testing::IsNotSubstring, "audio", answerSdp.sdp);
 
         closePeerConnection(pRtcPeerConnection);
-        EXPECT_EQ(STATUS_SUCCESS, freePeerConnection(&pRtcPeerConnection));
+        EXPECT_EQ(STATUS_SUCCESS, peer_connection_free(&pRtcPeerConnection));
     });
 }
 
@@ -785,7 +785,7 @@ a=ice-options:trickle
         ASSERT_EQ(2, ssrcLines.size());
 
         closePeerConnection(pRtcPeerConnection);
-        EXPECT_EQ(STATUS_SUCCESS, freePeerConnection(&pRtcPeerConnection));
+        EXPECT_EQ(STATUS_SUCCESS, peer_connection_free(&pRtcPeerConnection));
     });
 }
 
@@ -844,7 +844,7 @@ a=fmtp:102 strange
         EXPECT_PRED_FORMAT2(testing::IsNotSubstring, "fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f",
                             rtcSessionDescriptionInit.sdp);
         closePeerConnection(pRtcPeerConnection);
-        freePeerConnection(&pRtcPeerConnection);
+        peer_connection_free(&pRtcPeerConnection);
     });
 }
 

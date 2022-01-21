@@ -381,8 +381,8 @@ STATUS dtlsSessionStart(PDtlsSession pDtlsSession, BOOL isServer)
     }
 
     pDtlsSession->dtlsSessionStartTime = GETTIME();
-    CHK_STATUS(timerQueueAddTimer(pDtlsSession->timerQueueHandle, DTLS_SESSION_TIMER_START_DELAY, DTLS_TRANSMISSION_INTERVAL,
-                                  dtlsTransmissionTimerCallback, (UINT64) pDtlsSession, &pDtlsSession->timerId));
+    CHK_STATUS(timer_queue_addTimer(pDtlsSession->timerQueueHandle, DTLS_SESSION_TIMER_START_DELAY, DTLS_TRANSMISSION_INTERVAL,
+                                    dtlsTransmissionTimerCallback, (UINT64) pDtlsSession, &pDtlsSession->timerId));
 
 CleanUp:
 
@@ -409,7 +409,7 @@ STATUS freeDtlsSession(PDtlsSession* ppDtlsSession)
     CHK(pDtlsSession != NULL, retStatus);
 
     if (pDtlsSession->timerId != MAX_UINT32) {
-        timerQueueCancelTimer(pDtlsSession->timerQueueHandle, pDtlsSession->timerId, (UINT64) pDtlsSession);
+        timer_queue_cancelTimer(pDtlsSession->timerQueueHandle, pDtlsSession->timerId, (UINT64) pDtlsSession);
     }
 
     if (pDtlsSession->pSsl != NULL) {

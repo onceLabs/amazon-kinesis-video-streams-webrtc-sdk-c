@@ -765,9 +765,9 @@ STATUS rtcpReportsCallback(UINT32 timerId, UINT64 currentTime, UINT64 customData
     delay = 100 + (RAND() % 200);
     DLOGS("next sender report %u in %" PRIu64 " msec", ssrc, delay);
     // reschedule timer with 200msec +- 100ms
-    CHK_STATUS(timerQueueAddTimer(pKvsPeerConnection->timerQueueHandle, delay * HUNDREDS_OF_NANOS_IN_A_MILLISECOND,
-                                  TIMER_QUEUE_SINGLE_INVOCATION_PERIOD, rtcpReportsCallback, (UINT64) pKvsRtpTransceiver,
-                                  &pKvsRtpTransceiver->rtcpReportsTimerId));
+    CHK_STATUS(timer_queue_addTimer(pKvsPeerConnection->timerQueueHandle, delay * HUNDREDS_OF_NANOS_IN_A_MILLISECOND,
+                                    TIMER_QUEUE_SINGLE_INVOCATION_PERIOD, rtcpReportsCallback, (UINT64) pKvsRtpTransceiver,
+                                    &pKvsRtpTransceiver->rtcpReportsTimerId));
 
 CleanUp:
     CHK_LOG_ERR(retStatus);
@@ -839,7 +839,7 @@ CleanUp:
     CHK_LOG_ERR(retStatus);
 
     if (STATUS_FAILED(retStatus)) {
-        freePeerConnection((PRtcPeerConnection*) &pKvsPeerConnection);
+        peer_connection_free((PRtcPeerConnection*) &pKvsPeerConnection);
     }
 
     PC_LEAVES();
@@ -853,10 +853,7 @@ STATUS freeHashEntry(UINT64 customData, PHashEntry pHashEntry)
     return STATUS_SUCCESS;
 }
 
-/*
- * NOT thread-safe
- */
-STATUS freePeerConnection(PRtcPeerConnection* ppPeerConnection)
+STATUS peer_connection_free(PRtcPeerConnection* ppPeerConnection)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -876,7 +873,7 @@ STATUS freePeerConnection(PRtcPeerConnection* ppPeerConnection)
 
     // free timer queue first to remove liveness provided by timer
     if (IS_VALID_TIMER_QUEUE_HANDLE(pKvsPeerConnection->timerQueueHandle)) {
-        timerQueueShutdown(pKvsPeerConnection->timerQueueHandle);
+        timer_queue_shutdown(pKvsPeerConnection->timerQueueHandle);
     }
 
 /* Free structs that have their own thread. SCTP has threads created by SCTP library. IceAgent has the
@@ -924,7 +921,7 @@ STATUS freePeerConnection(PRtcPeerConnection* ppPeerConnection)
     }
 
     if (IS_VALID_TIMER_QUEUE_HANDLE(pKvsPeerConnection->timerQueueHandle)) {
-        timerQueueFree(&pKvsPeerConnection->timerQueueHandle);
+        timer_queue_free(&pKvsPeerConnection->timerQueueHandle);
     }
 
     SAFE_MEMFREE(pKvsPeerConnection);
@@ -1312,8 +1309,8 @@ STATUS addTransceiver(PRtcPeerConnection pPeerConnection, PRtcMediaStreamTrack p
     CHK_STATUS(doubleListInsertItemHead(pKvsPeerConnection->pTransceivers, (UINT64) pKvsRtpTransceiver));
     *ppRtcRtpTransceiver = (PRtcRtpTransceiver) pKvsRtpTransceiver;
 
-    CHK_STATUS(timerQueueAddTimer(pKvsPeerConnection->timerQueueHandle, RTCP_FIRST_REPORT_DELAY, TIMER_QUEUE_SINGLE_INVOCATION_PERIOD,
-                                  rtcpReportsCallback, (UINT64) pKvsRtpTransceiver, &pKvsRtpTransceiver->rtcpReportsTimerId));
+    CHK_STATUS(timer_queue_addTimer(pKvsPeerConnection->timerQueueHandle, RTCP_FIRST_REPORT_DELAY, TIMER_QUEUE_SINGLE_INVOCATION_PERIOD,
+                                    rtcpReportsCallback, (UINT64) pKvsRtpTransceiver, &pKvsRtpTransceiver->rtcpReportsTimerId));
 
     pKvsRtpTransceiver = NULL;
 
