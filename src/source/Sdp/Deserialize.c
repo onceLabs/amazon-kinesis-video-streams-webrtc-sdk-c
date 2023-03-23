@@ -1,6 +1,18 @@
 #define LOG_CLASS "SDP"
-#include "../Include_i.h"
 
+#include "SessionDescription.h"
+/**
+ * @brief   parse the string of media (streaming description)
+ *          m=audio 9 UDP/TLS/RTP/SAVPF 111 103 104 9 0 8 106 105 13 110 112 113 126\r\n
+ *          m=video 9 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 102 121 127 120 125 107 108 109 124 119 123 118 114 115 116\r\n
+ *          m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n
+ *
+ * @param[in] pSessionDescription
+ * @param[in] pch
+ * @param[in] lineLen
+ *
+ * @return
+ */
 STATUS parseMediaName(PSessionDescription pSessionDescription, PCHAR pch, UINT32 lineLen)
 {
     ENTERS();
@@ -47,7 +59,7 @@ STATUS parseMediaAttributes(PSessionDescription pSessionDescription, PCHAR pch, 
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PCHAR search;
-    UINT16 currentMediaAttributesCount;
+    UINT8 currentMediaAttributesCount;
 
     currentMediaAttributesCount = pSessionDescription->mediaDescriptions[pSessionDescription->mediaCount - 1].mediaAttributesCount;
 
@@ -76,7 +88,7 @@ STATUS deserializeSessionDescription(PSessionDescription pSessionDescription, PC
     STATUS retStatus = STATUS_SUCCESS;
     PCHAR curr, tail, next;
     UINT32 lineLen;
-    CHK(sdpBytes != NULL, STATUS_SESSION_DESCRIPTION_INVALID_SESSION_DESCRIPTION);
+    CHK(sdpBytes != NULL, STATUS_SDP_INVALID_SESSION_DESCRIPTION);
 
     curr = sdpBytes;
     tail = sdpBytes + STRLEN(sdpBytes);

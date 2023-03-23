@@ -1,7 +1,34 @@
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
+#ifdef ENABLE_STREAMING
 #define LOG_CLASS "RtcRtcp"
 
-#include "../Include_i.h"
+#include "RtcpPacket.h"
+#include "Rtp.h"
+#include "Rtcp.h"
+#include "Time.h"
 
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 // TODO handle FIR packet https://tools.ietf.org/html/rfc2032#section-5.2.1
 static STATUS onRtcpFIRPacket(PRtcpPacket pRtcpPacket, PKvsPeerConnection pKvsPeerConnection)
 {
@@ -9,7 +36,7 @@ static STATUS onRtcpFIRPacket(PRtcpPacket pRtcpPacket, PKvsPeerConnection pKvsPe
     UINT32 mediaSSRC;
     PKvsRtpTransceiver pTransceiver = NULL;
 
-    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_NULL_ARG);
+    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_RTCP_NULL_ARG);
     mediaSSRC = getUnalignedInt32BigEndian((pRtcpPacket->payload + (SIZEOF(UINT32))));
     if (STATUS_SUCCEEDED(findTransceiverBySsrc(pKvsPeerConnection, &pTransceiver, mediaSSRC))) {
         MUTEX_LOCK(pTransceiver->statsLock);
@@ -34,7 +61,7 @@ static STATUS onRtcpSLIPacket(PRtcpPacket pRtcpPacket, PKvsPeerConnection pKvsPe
     UINT32 mediaSSRC;
     PKvsRtpTransceiver pTransceiver = NULL;
 
-    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_NULL_ARG);
+    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_RTCP_NULL_ARG);
     mediaSSRC = getUnalignedInt32BigEndian((pRtcpPacket->payload + (SIZEOF(UINT32))));
     if (STATUS_SUCCEEDED(findTransceiverBySsrc(pKvsPeerConnection, &pTransceiver, mediaSSRC))) {
         MUTEX_LOCK(pTransceiver->statsLock);
@@ -48,18 +75,61 @@ CleanUp:
 
     return retStatus;
 }
-
-// TODO better sender report handling https://tools.ietf.org/html/rfc3550#section-6.4.1
+/**
+ * @brief TODO better sender report handling https://tools.ietf.org/html/rfc3550#section-6.4.1
+ *        0                   1                   2                   3
+ *        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ * header |V=2|P|    RC   |   PT=SR=200   |             length            |
+ *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *        |                         SSRC of sender                        |
+ *        +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+ * sender |              NTP timestamp, most significant word             |
+ * info   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *        |             NTP timestamp, least significant word             |
+ *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *        |                         RTP timestamp                         |
+ *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *        |                     sender's packet count                     |
+ *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *        |                      sender's octet count                     |
+ *        +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+ * report |                 SSRC_1 (SSRC of first source)                 |
+ * block  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *   1    | fraction lost |       cumulative number of packets lost       |
+ *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *        |           extended highest sequence number received           |
+ *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *        |                      interarrival jitter                      |
+ *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *        |                         last SR (LSR)                         |
+ *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *        |                   delay since last SR (DLSR)                  |
+ *        +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+ * report |                 SSRC_2 (SSRC of second source)                |
+ * block  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *   2    :                               ...                             :
+ *        +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+ *        |                  profile-specific extensions                  |
+ *        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *
+ *
+ * @param[in] pRtcpPacket the buffer of rtcp packet.
+ * @param[in] pKvsPeerConnection the context of peer connection.
+ *
+ * @return STATUS status of execution
+ */
 static STATUS onRtcpSenderReport(PRtcpPacket pRtcpPacket, PKvsPeerConnection pKvsPeerConnection)
 {
     STATUS retStatus = STATUS_SUCCESS;
     UINT32 senderSSRC;
     PKvsRtpTransceiver pTransceiver = NULL;
 
-    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_NULL_ARG);
+    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_RTCP_NULL_ARG);
 
     if (pRtcpPacket->payloadLength != RTCP_PACKET_SENDER_REPORT_MINLEN) {
         // TODO: handle sender report containing receiver report blocks
+        DLOGW("unhandled packet type RTCP_PACKET_SENDER_REPORT size %d", pRtcpPacket->payloadLength);
         return STATUS_SUCCESS;
     }
 
@@ -87,10 +157,11 @@ static STATUS onRtcpReceiverReport(PRtcpPacket pRtcpPacket, PKvsPeerConnection p
     UINT32 rttPropDelayMsec = 0, rttPropDelay, delaySinceLastSR, lastSR, interarrivalJitter, extHiSeqNumReceived, cumulativeLost, senderSSRC, ssrc1;
     UINT64 currentTimeNTP = convertTimestampToNTP(GETTIME());
 
-    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_NULL_ARG);
+    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_RTCP_NULL_ARG);
     // https://tools.ietf.org/html/rfc3550#section-6.4.2
     if (pRtcpPacket->payloadLength != RTCP_PACKET_RECEIVER_REPORT_MINLEN) {
         // TODO: handle multiple receiver report blocks
+        DLOGS("unhandled packet type RTCP_PACKET_TYPE_RECEIVER_REPORT size %d", pRtcpPacket->payloadLength);
         return STATUS_SUCCESS;
     }
 
@@ -137,209 +208,13 @@ CleanUp:
     return retStatus;
 }
 
-STATUS parseRtcpTwccPacket(PRtcpPacket pRtcpPacket, PTwccManager pTwccManager)
-{
-    /*
-        0                   1                   2                   3
-        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |V=2|P|  FMT=15 |    PT=205     |           length              |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |                     SSRC of packet sender                     |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |                      SSRC of media source                     |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |      base sequence number     |      packet status count      |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |                 reference time                | fb pkt. count |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |          packet chunk         |         packet chunk          |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       .                                                               .
-       .                                                               .
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |         packet chunk          |  recv delta   |  recv delta   |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       .                                                               .
-       .                                                               .
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-       |           recv delta          |  recv delta   | zero padding  |
-       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     */
-    STATUS retStatus = STATUS_SUCCESS;
-    INT32 packetsRemaining;
-    UINT16 baseSeqNum, packetStatusCount, packetSeqNum;
-    UINT32 chunkOffset, recvOffset;
-    UINT8 statusSymbol;
-    UINT32 packetChunk;
-    INT16 recvDelta;
-    UINT32 statuses;
-    UINT32 i;
-    UINT64 referenceTime;
-    CHK(pTwccManager != NULL && pRtcpPacket != NULL, STATUS_NULL_ARG);
-
-    baseSeqNum = getUnalignedInt16BigEndian(pRtcpPacket->payload + 8);
-    packetStatusCount = TWCC_PACKET_STATUS_COUNT(pRtcpPacket->payload);
-
-    referenceTime = (pRtcpPacket->payload[12] << 16) | (pRtcpPacket->payload[13] << 8) | (pRtcpPacket->payload[14] & 0xff);
-    referenceTime = KVS_CONVERT_TIMESCALE(referenceTime * 64, MILLISECONDS_PER_SECOND, HUNDREDS_OF_NANOS_IN_A_SECOND);
-    // TODO: handle lost twcc report packets
-
-    packetsRemaining = packetStatusCount;
-    chunkOffset = 16;
-    while (packetsRemaining > 0 && chunkOffset < pRtcpPacket->payloadLength) {
-        packetChunk = getUnalignedInt16BigEndian(pRtcpPacket->payload + chunkOffset);
-        if (IS_TWCC_RUNLEN(packetChunk)) {
-            packetsRemaining -= TWCC_RUNLEN_GET(packetChunk);
-        } else {
-            packetsRemaining -= MIN(TWCC_STATUSVECTOR_COUNT(packetChunk), packetsRemaining);
-        }
-        chunkOffset += TWCC_FB_PACKETCHUNK_SIZE;
-    }
-
-    recvOffset = chunkOffset;
-    chunkOffset = 16;
-    packetSeqNum = baseSeqNum;
-    packetsRemaining = packetStatusCount;
-    while (packetsRemaining > 0) {
-        packetChunk = getUnalignedInt16BigEndian(pRtcpPacket->payload + chunkOffset);
-        statusSymbol = TWCC_RUNLEN_STATUS_SYMBOL(packetChunk);
-        if (IS_TWCC_RUNLEN(packetChunk)) {
-            for (i = 0; i < TWCC_RUNLEN_GET(packetChunk); i++) {
-                recvDelta = MIN_INT16;
-                switch (statusSymbol) {
-                    case TWCC_STATUS_SYMBOL_SMALLDELTA:
-                        recvDelta = (INT16) pRtcpPacket->payload[recvOffset];
-                        recvOffset++;
-                        break;
-                    case TWCC_STATUS_SYMBOL_LARGEDELTA:
-                        recvDelta = getUnalignedInt16BigEndian(pRtcpPacket->payload + recvOffset);
-                        recvOffset += 2;
-                        break;
-                    case TWCC_STATUS_SYMBOL_NOTRECEIVED:
-                        DLOGS("runLength packetSeqNum %u not received %lu", packetSeqNum, referenceTime);
-                        pTwccManager->twccPacketBySeqNum[packetSeqNum].remoteTimeKvs = TWCC_PACKET_LOST_TIME;
-                        pTwccManager->lastReportedSeqNum = packetSeqNum;
-                        break;
-                    default:
-                        DLOGD("runLength unhandled statusSymbol %u", statusSymbol);
-                }
-                if (recvDelta != MIN_INT16) {
-                    referenceTime += KVS_CONVERT_TIMESCALE(recvDelta, TWCC_TICKS_PER_SECOND, HUNDREDS_OF_NANOS_IN_A_SECOND);
-                    DLOGS("runLength packetSeqNum %u received %lu", packetSeqNum, referenceTime);
-                    pTwccManager->twccPacketBySeqNum[packetSeqNum].remoteTimeKvs = referenceTime;
-                    pTwccManager->lastReportedSeqNum = packetSeqNum;
-                }
-                packetSeqNum++;
-                packetsRemaining--;
-            }
-        } else {
-            statuses = MIN(TWCC_STATUSVECTOR_COUNT(packetChunk), packetsRemaining);
-
-            for (i = 0; i < statuses; i++) {
-                statusSymbol = TWCC_STATUSVECTOR_STATUS(packetChunk, i);
-                recvDelta = MIN_INT16;
-                switch (statusSymbol) {
-                    case TWCC_STATUS_SYMBOL_SMALLDELTA:
-                        recvDelta = (INT16) pRtcpPacket->payload[recvOffset];
-                        recvOffset++;
-                        break;
-                    case TWCC_STATUS_SYMBOL_LARGEDELTA:
-                        recvDelta = getUnalignedInt16BigEndian(pRtcpPacket->payload + recvOffset);
-                        recvOffset += 2;
-                        break;
-                    case TWCC_STATUS_SYMBOL_NOTRECEIVED:
-                        DLOGS("statusVector packetSeqNum %u not received %lu", packetSeqNum, referenceTime);
-                        pTwccManager->twccPacketBySeqNum[packetSeqNum].remoteTimeKvs = TWCC_PACKET_LOST_TIME;
-                        pTwccManager->lastReportedSeqNum = packetSeqNum;
-                        break;
-                    default:
-                        DLOGD("statusVector unhandled statusSymbol %u", statusSymbol);
-                }
-                if (recvDelta != MIN_INT16) {
-                    referenceTime += KVS_CONVERT_TIMESCALE(recvDelta, TWCC_TICKS_PER_SECOND, HUNDREDS_OF_NANOS_IN_A_SECOND);
-                    DLOGS("statusVector packetSeqNum %u received %lu", packetSeqNum, referenceTime);
-                    pTwccManager->twccPacketBySeqNum[packetSeqNum].remoteTimeKvs = referenceTime;
-                    pTwccManager->lastReportedSeqNum = packetSeqNum;
-                }
-                packetSeqNum++;
-                packetsRemaining--;
-            }
-        }
-        chunkOffset += TWCC_FB_PACKETCHUNK_SIZE;
-    }
-
-CleanUp:
-    CHK_LOG_ERR(retStatus);
-    return retStatus;
-}
-
-STATUS onRtcpTwccPacket(PRtcpPacket pRtcpPacket, PKvsPeerConnection pKvsPeerConnection)
-{
-    STATUS retStatus = STATUS_SUCCESS;
-    PTwccManager twcc;
-    BOOL locked = FALSE;
-    BOOL empty = TRUE;
-    UINT64 sn = 0;
-    INT64 ageOfOldestPacket;
-    UINT64 localStartTimeKvs, localEndTimeKvs;
-    UINT64 sentBytes = 0, receivedBytes = 0;
-    UINT64 sentPackets = 0, receivedPackets = 0;
-    INT64 duration = 0;
-    UINT16 seqNum;
-    PTwccPacket twccPacket;
-
-    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_NULL_ARG);
-    CHK(pKvsPeerConnection->onSenderBandwidthEstimation != NULL && pKvsPeerConnection->pTwccManager != NULL, STATUS_SUCCESS);
-
-    MUTEX_LOCK(pKvsPeerConnection->twccLock);
-    locked = TRUE;
-    twcc = pKvsPeerConnection->pTwccManager;
-    CHK_STATUS(parseRtcpTwccPacket(pRtcpPacket, twcc));
-    CHK_STATUS(stackQueueIsEmpty(&twcc->twccPackets, &empty));
-    CHK(!empty, STATUS_SUCCESS);
-    CHK_STATUS(stackQueuePeek(&twcc->twccPackets, &sn));
-    ageOfOldestPacket = twcc->lastLocalTimeKvs - twcc->twccPacketBySeqNum[(UINT16) sn].localTimeKvs;
-    CHK(ageOfOldestPacket > TWCC_ESTIMATOR_TIME_WINDOW / 2, STATUS_SUCCESS);
-    localStartTimeKvs = twcc->twccPacketBySeqNum[(UINT16) (sn - 1)].localTimeKvs;
-    if (localStartTimeKvs == TWCC_PACKET_UNITIALIZED_TIME) {
-        // time not yet set (only happens for first rtp packet)
-        localStartTimeKvs = twcc->twccPacketBySeqNum[(UINT16) sn].localTimeKvs;
-    }
-    for (seqNum = sn; seqNum != twcc->lastReportedSeqNum; seqNum++) {
-        twccPacket = &twcc->twccPacketBySeqNum[seqNum];
-        localEndTimeKvs = twccPacket->localTimeKvs;
-        duration = localEndTimeKvs - localStartTimeKvs;
-        sentBytes += twccPacket->packetSize;
-        sentPackets++;
-        if (twccPacket->remoteTimeKvs != TWCC_PACKET_LOST_TIME) {
-            receivedBytes += twccPacket->packetSize;
-            receivedPackets++;
-        }
-    }
-
-    if (duration > 0) {
-        MUTEX_UNLOCK(pKvsPeerConnection->twccLock);
-        locked = FALSE;
-        pKvsPeerConnection->onSenderBandwidthEstimation(pKvsPeerConnection->onSenderBandwidthEstimationCustomData, sentBytes, receivedBytes,
-                                                        sentPackets, receivedPackets, duration);
-    }
-
-CleanUp:
-    CHK_LOG_ERR(retStatus);
-    if (locked) {
-        MUTEX_UNLOCK(pKvsPeerConnection->twccLock);
-    }
-    return retStatus;
-}
-
 STATUS onRtcpPacket(PKvsPeerConnection pKvsPeerConnection, PBYTE pBuff, UINT32 buffLen)
 {
     STATUS retStatus = STATUS_SUCCESS;
     RtcpPacket rtcpPacket;
     UINT32 currentOffset = 0;
 
-    CHK(pKvsPeerConnection != NULL && pBuff != NULL, STATUS_NULL_ARG);
+    CHK(pKvsPeerConnection != NULL && pBuff != NULL, STATUS_RTCP_NULL_ARG);
 
     while (currentOffset < buffLen) {
         CHK_STATUS(setRtcpPacketFromBytes(pBuff + currentOffset, buffLen - currentOffset, &rtcpPacket));
@@ -351,8 +226,6 @@ STATUS onRtcpPacket(PKvsPeerConnection pKvsPeerConnection, PBYTE pBuff, UINT32 b
             case RTCP_PACKET_TYPE_GENERIC_RTP_FEEDBACK:
                 if (rtcpPacket.header.receptionReportCount == RTCP_FEEDBACK_MESSAGE_TYPE_NACK) {
                     CHK_STATUS(resendPacketOnNack(&rtcpPacket, pKvsPeerConnection));
-                } else if (rtcpPacket.header.receptionReportCount == RTCP_FEEDBACK_MESSAGE_TYPE_APPLICATION_LAYER_FEEDBACK) {
-                    CHK_STATUS(onRtcpTwccPacket(&rtcpPacket, pKvsPeerConnection));
                 } else {
                     DLOGW("unhandled RTCP_PACKET_TYPE_GENERIC_RTP_FEEDBACK %d", rtcpPacket.header.receptionReportCount);
                 }
@@ -378,6 +251,8 @@ STATUS onRtcpPacket(PKvsPeerConnection pKvsPeerConnection, PBYTE pBuff, UINT32 b
             case RTCP_PACKET_TYPE_SOURCE_DESCRIPTION:
                 DLOGV("unhandled packet type RTCP_PACKET_TYPE_SOURCE_DESCRIPTION");
                 break;
+            case RTCP_PACKET_TYPE_BYTE:
+                break;
             default:
                 DLOGW("unhandled packet type %d", rtcpPacket.header.packetType);
                 break;
@@ -401,7 +276,7 @@ STATUS onRtcpRembPacket(PRtcpPacket pRtcpPacket, PKvsPeerConnection pKvsPeerConn
     UINT32 i;
     PKvsRtpTransceiver pTransceiver = NULL;
 
-    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_NULL_ARG);
+    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_RTCP_NULL_ARG);
 
     CHK_STATUS(rembValueGet(pRtcpPacket->payload, pRtcpPacket->payloadLength, &maximumBitRate, (PUINT32) &ssrcList, &ssrcListLen));
 
@@ -426,7 +301,7 @@ STATUS onRtcpPLIPacket(PRtcpPacket pRtcpPacket, PKvsPeerConnection pKvsPeerConne
     UINT32 mediaSSRC;
     PKvsRtpTransceiver pTransceiver = NULL;
 
-    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_NULL_ARG);
+    CHK(pKvsPeerConnection != NULL && pRtcpPacket != NULL, STATUS_RTCP_NULL_ARG);
     mediaSSRC = getUnalignedInt32BigEndian((pRtcpPacket->payload + (SIZEOF(UINT32))));
 
     CHK_STATUS_ERR(findTransceiverBySsrc(pKvsPeerConnection, &pTransceiver, mediaSSRC), STATUS_RTCP_INPUT_SSRC_INVALID,
@@ -444,3 +319,4 @@ CleanUp:
 
     return retStatus;
 }
+#endif

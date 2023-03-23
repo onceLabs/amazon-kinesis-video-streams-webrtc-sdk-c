@@ -10,6 +10,11 @@ SessionDescription internal include file
 extern "C" {
 #endif
 
+#include "HashTable.h"
+#include "DoubleLinkedList.h"
+#include "Sdp.h"
+#include "PeerConnection.h"
+
 #define SESSION_DESCRIPTION_INIT_LINE_ENDING            "\\r\\n"
 #define SESSION_DESCRIPTION_INIT_LINE_ENDING_WITHOUT_CR "\\n"
 
@@ -35,34 +40,22 @@ extern "C" {
 #define ALAW_VALUE      "PCMA/8000"
 #define RTX_VALUE       "rtx/90000"
 #define RTX_CODEC_VALUE "apt="
-#define FMTP_VALUE      "fmtp:"
 
 #define DEFAULT_PAYLOAD_MULAW (UINT64) 0
 #define DEFAULT_PAYLOAD_ALAW  (UINT64) 8
 #define DEFAULT_PAYLOAD_OPUS  (UINT64) 111
 #define DEFAULT_PAYLOAD_VP8   (UINT64) 96
 #define DEFAULT_PAYLOAD_H264  (UINT64) 125
-
+/**
+ * a=rtpmap:0 PCMU/8000\r\n
+ * a=rtpmap:8 PCMA/8000\r\n
+ * a=rtpmap:111 opus/48000/2\r\n
+ */
 #define DEFAULT_PAYLOAD_MULAW_STR (PCHAR) "0"
 #define DEFAULT_PAYLOAD_ALAW_STR  (PCHAR) "8"
 
 #define DEFAULT_H264_FMTP   (PCHAR) "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f"
 #define DEFAULT_OPUS_FMTP   (PCHAR) "minptime=10;useinbandfec=1"
-#define H264_PROFILE_42E01F 0x42e01f
-// profile-level-id:
-//   A base16 [7] (hexadecimal) representation of the following
-//   three bytes in the sequence parameter set NAL unit is specified
-//   in [1]: 1) profile_idc, 2) a byte herein referred to as
-//   profile-iop, composed of the values of constraint_set0_flag,
-//   constraint_set1_flag, constraint_set2_flag,
-//   constraint_set3_flag, constraint_set4_flag,
-//   constraint_set5_flag, and reserved_zero_2bits in bit-
-//   significance order, starting from the most-significant bit, and
-//   3) level_id.
-//
-// Reference: https://tools.ietf.org/html/rfc6184#section-8.1
-#define H264_FMTP_SUBPROFILE_MASK    0xFFFF00
-#define H264_FMTP_PROFILE_LEVEL_MASK 0x0000FF
 
 #define DTLS_ROLE_ACTPASS (PCHAR) "actpass"
 #define DTLS_ROLE_ACTIVE  (PCHAR) "active"
@@ -71,10 +64,15 @@ extern "C" {
 #define OPUS_CLOCKRATE  (UINT64) 48000
 #define PCM_CLOCKRATE   (UINT64) 8000
 
-// https://tools.ietf.org/html/draft-holmer-rmcat-transport-wide-cc-extensions-01
-#define TWCC_SDP_ATTR "transport-cc"
-#define TWCC_EXT_URL  "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
-
+/**
+ * @brief latch the value of rtp codec.
+ *
+ * @param[in] codecTable the codec table of transimission.
+ * @param[in] rtxTable the codec table of retransmission.
+ * @param[in] pSessionDescription the sdp of the offer.
+ *
+ * @return STATUS_SUCCESS
+ */
 STATUS setPayloadTypesFromOffer(PHashTable, PHashTable, PSessionDescription);
 STATUS setPayloadTypesForOffer(PHashTable);
 
@@ -83,7 +81,6 @@ STATUS populateSessionDescription(PKvsPeerConnection, PSessionDescription, PSess
 STATUS reorderTransceiverByRemoteDescription(PKvsPeerConnection, PSessionDescription);
 STATUS setReceiversSsrc(PSessionDescription, PDoubleList);
 PCHAR fmtpForPayloadType(UINT64, PSessionDescription);
-UINT64 getH264FmtpScore(PCHAR);
 
 #ifdef __cplusplus
 }

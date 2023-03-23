@@ -1,7 +1,29 @@
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
 #define LOG_CLASS "RtpRollingBuffer"
 
-#include "../Include_i.h"
-
+#include "RtpRollingBuffer.h"
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 STATUS createRtpRollingBuffer(UINT32 capacity, PRtpRollingBuffer* ppRtpRollingBuffer)
 {
     ENTERS();
@@ -58,10 +80,10 @@ STATUS rtpRollingBufferAddRtpPacket(PRtpRollingBuffer pRollingBuffer, PRtpPacket
     PRtpPacket pRtpPacketCopy = NULL;
     PBYTE pRawPacketCopy = NULL;
     UINT64 index = 0;
-    CHK(pRollingBuffer != NULL && pRtpPacket != NULL, STATUS_NULL_ARG);
+    CHK(pRollingBuffer != NULL && pRtpPacket != NULL, STATUS_RTP_NULL_ARG);
 
     pRawPacketCopy = (PBYTE) MEMALLOC(pRtpPacket->rawPacketLength);
-    CHK(pRawPacketCopy != NULL, STATUS_NOT_ENOUGH_MEMORY);
+    CHK(pRawPacketCopy != NULL, STATUS_RTP_NOT_ENOUGH_MEMORY);
     MEMCPY(pRawPacketCopy, pRtpPacket->pRawPacket, pRtpPacket->rawPacketLength);
     CHK_STATUS(createRtpPacketFromBytes(pRawPacketCopy, pRtpPacket->rawPacketLength, &pRtpPacketCopy));
     // pRtpPacketCopy took ownership of pRawPacketCopy

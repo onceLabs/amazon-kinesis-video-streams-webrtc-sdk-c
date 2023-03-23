@@ -2,21 +2,24 @@
  * Kinesis WebRTC Metrics
  */
 #define LOG_CLASS "Metrics"
-#include "../Include_i.h"
+#include "PeerConnection.h"
+#include "Rtp.h"
+#include "DataChannel.h"
 
 STATUS getIceCandidatePairStats(PRtcPeerConnection pRtcPeerConnection, PRtcIceCandidatePairStats pRtcIceCandidatePairStats)
 {
     STATUS retStatus = STATUS_SUCCESS;
     BOOL locked = FALSE;
     PIceAgent pIceAgent = NULL;
-    CHK((pRtcPeerConnection != NULL || pRtcIceCandidatePairStats != NULL), STATUS_NULL_ARG);
+
+    CHK((pRtcPeerConnection != NULL || pRtcIceCandidatePairStats != NULL), STATUS_METRICS_NULL_ARG);
     pIceAgent = ((PKvsPeerConnection) pRtcPeerConnection)->pIceAgent;
     MUTEX_LOCK(pIceAgent->lock);
     locked = TRUE;
     CHK(pIceAgent->pDataSendingIceCandidatePair != NULL, STATUS_SUCCESS);
     PRtcIceCandidatePairDiagnostics pRtcIceCandidatePairDiagnostics = &pIceAgent->pDataSendingIceCandidatePair->rtcIceCandidatePairDiagnostics;
-    STRCPY(pRtcIceCandidatePairStats->localCandidateId, pRtcIceCandidatePairDiagnostics->localCandidateId);
-    STRCPY(pRtcIceCandidatePairStats->remoteCandidateId, pRtcIceCandidatePairDiagnostics->remoteCandidateId);
+    STRNCPY(pRtcIceCandidatePairStats->localCandidateId, pRtcIceCandidatePairDiagnostics->localCandidateId, MAX_CANDIDATE_ID_LENGTH);
+    STRNCPY(pRtcIceCandidatePairStats->remoteCandidateId, pRtcIceCandidatePairDiagnostics->remoteCandidateId, MAX_CANDIDATE_ID_LENGTH);
     pRtcIceCandidatePairStats->state = pRtcIceCandidatePairDiagnostics->state;
     pRtcIceCandidatePairStats->nominated = pRtcIceCandidatePairDiagnostics->nominated;
 
@@ -56,20 +59,20 @@ STATUS getIceCandidateStats(PRtcPeerConnection pRtcPeerConnection, BOOL isRemote
     STATUS retStatus = STATUS_SUCCESS;
     BOOL locked = FALSE;
     PIceAgent pIceAgent = ((PKvsPeerConnection) pRtcPeerConnection)->pIceAgent;
-    CHK((pRtcPeerConnection != NULL || pRtcIceCandidateStats != NULL), STATUS_NULL_ARG);
+    CHK((pRtcPeerConnection != NULL || pRtcIceCandidateStats != NULL), STATUS_METRICS_NULL_ARG);
     MUTEX_LOCK(pIceAgent->lock);
     locked = TRUE;
     PRtcIceCandidateDiagnostics pRtcIceCandidateDiagnostics = &pIceAgent->rtcSelectedRemoteIceCandidateDiagnostics;
     if (!isRemote) {
         pRtcIceCandidateDiagnostics = &pIceAgent->rtcSelectedLocalIceCandidateDiagnostics;
-        STRCPY(pRtcIceCandidateStats->relayProtocol, pRtcIceCandidateDiagnostics->relayProtocol);
-        STRCPY(pRtcIceCandidateStats->url, pRtcIceCandidateDiagnostics->url);
+        STRNCPY(pRtcIceCandidateStats->relayProtocol, pRtcIceCandidateDiagnostics->relayProtocol, MAX_STATS_STRING_LENGTH);
+        STRNCPY(pRtcIceCandidateStats->url, pRtcIceCandidateDiagnostics->url, MAX_STATS_STRING_LENGTH);
     }
-    STRCPY(pRtcIceCandidateStats->address, pRtcIceCandidateDiagnostics->address);
-    STRCPY(pRtcIceCandidateStats->candidateType, pRtcIceCandidateDiagnostics->candidateType);
+    STRNCPY(pRtcIceCandidateStats->address, pRtcIceCandidateDiagnostics->address, IP_ADDR_STR_LENGTH);
+    STRNCPY(pRtcIceCandidateStats->candidateType, pRtcIceCandidateDiagnostics->candidateType, MAX_STATS_STRING_LENGTH);
     pRtcIceCandidateStats->port = pRtcIceCandidateDiagnostics->port;
     pRtcIceCandidateStats->priority = pRtcIceCandidateDiagnostics->priority;
-    STRCPY(pRtcIceCandidateStats->protocol, pRtcIceCandidateDiagnostics->protocol);
+    STRNCPY(pRtcIceCandidateStats->protocol, pRtcIceCandidateDiagnostics->protocol, MAX_STATS_STRING_LENGTH);
 CleanUp:
     if (locked) {
         MUTEX_UNLOCK(pIceAgent->lock);
@@ -82,14 +85,14 @@ STATUS getIceServerStats(PRtcPeerConnection pRtcPeerConnection, PRtcIceServerSta
     STATUS retStatus = STATUS_SUCCESS;
     BOOL locked = FALSE;
     PIceAgent pIceAgent = ((PKvsPeerConnection) pRtcPeerConnection)->pIceAgent;
-    CHK((pRtcPeerConnection != NULL && pRtcIceServerStats != NULL), STATUS_NULL_ARG);
+    CHK((pRtcPeerConnection != NULL && pRtcIceServerStats != NULL), STATUS_METRICS_NULL_ARG);
     CHK(pRtcIceServerStats->iceServerIndex < pIceAgent->iceServersCount, STATUS_ICE_SERVER_INDEX_INVALID);
 
     MUTEX_LOCK(pIceAgent->lock);
     locked = TRUE;
     pRtcIceServerStats->port = pIceAgent->rtcIceServerDiagnostics[pRtcIceServerStats->iceServerIndex].port;
-    STRCPY(pRtcIceServerStats->protocol, pIceAgent->rtcIceServerDiagnostics[pRtcIceServerStats->iceServerIndex].protocol);
-    STRCPY(pRtcIceServerStats->url, pIceAgent->rtcIceServerDiagnostics[pRtcIceServerStats->iceServerIndex].url);
+    STRNCPY(pRtcIceServerStats->protocol, pIceAgent->rtcIceServerDiagnostics[pRtcIceServerStats->iceServerIndex].protocol, MAX_STATS_STRING_LENGTH);
+    STRNCPY(pRtcIceServerStats->url, pIceAgent->rtcIceServerDiagnostics[pRtcIceServerStats->iceServerIndex].url, MAX_STATS_STRING_LENGTH);
     pRtcIceServerStats->totalRequestsSent = pIceAgent->rtcIceServerDiagnostics[pRtcIceServerStats->iceServerIndex].totalRequestsSent;
     pRtcIceServerStats->totalResponsesReceived = pIceAgent->rtcIceServerDiagnostics[pRtcIceServerStats->iceServerIndex].totalResponsesReceived;
     pRtcIceServerStats->totalRoundTripTime = pIceAgent->rtcIceServerDiagnostics[pRtcIceServerStats->iceServerIndex].totalRoundTripTime;
@@ -105,7 +108,7 @@ STATUS getTransportStats(PRtcPeerConnection pRtcPeerConnection, PRtcTransportSta
     STATUS retStatus = STATUS_SUCCESS;
     PKvsPeerConnection pKvsPeerConnection = (PKvsPeerConnection) pRtcPeerConnection;
     UNUSED_PARAM(pKvsPeerConnection);
-    CHK(pRtcPeerConnection != NULL || pRtcTransportStats != NULL, STATUS_NULL_ARG);
+    CHK(pRtcPeerConnection != NULL || pRtcTransportStats != NULL, STATUS_METRICS_NULL_ARG);
     CHK(FALSE, STATUS_NOT_IMPLEMENTED);
 CleanUp:
     return retStatus;
@@ -115,10 +118,11 @@ STATUS getRtpRemoteInboundStats(PRtcPeerConnection pRtcPeerConnection, PRtcRtpTr
                                 PRtcRemoteInboundRtpStreamStats pRtcRemoteInboundRtpStreamStats)
 {
     STATUS retStatus = STATUS_SUCCESS;
+#ifdef ENABLE_STREAMING
     PDoubleListNode node = NULL;
     UINT64 hashValue = 0;
     PKvsPeerConnection pKvsPeerConnection = (PKvsPeerConnection) pRtcPeerConnection;
-    CHK(pRtcPeerConnection != NULL || pRtcRemoteInboundRtpStreamStats != NULL, STATUS_NULL_ARG);
+    CHK(pRtcPeerConnection != NULL || pRtcRemoteInboundRtpStreamStats != NULL, STATUS_METRICS_NULL_ARG);
     PKvsRtpTransceiver pKvsRtpTransceiver = (PKvsRtpTransceiver) pTransceiver;
     if (pKvsRtpTransceiver == NULL) {
         CHK_STATUS(doubleListGetHeadNode(pKvsPeerConnection->pTransceivers, &node));
@@ -132,6 +136,7 @@ STATUS getRtpRemoteInboundStats(PRtcPeerConnection pRtcPeerConnection, PRtcRtpTr
     *pRtcRemoteInboundRtpStreamStats = pKvsRtpTransceiver->remoteInboundStats;
     MUTEX_UNLOCK(pKvsRtpTransceiver->statsLock);
 CleanUp:
+#endif
     return retStatus;
 }
 
@@ -139,10 +144,11 @@ STATUS getRtpOutboundStats(PRtcPeerConnection pRtcPeerConnection, PRtcRtpTransce
                            PRtcOutboundRtpStreamStats pRtcOutboundRtpStreamStats)
 {
     STATUS retStatus = STATUS_SUCCESS;
+#ifdef ENABLE_STREAMING
     PDoubleListNode node = NULL;
     UINT64 hashValue = 0;
     PKvsPeerConnection pKvsPeerConnection = (PKvsPeerConnection) pRtcPeerConnection;
-    CHK(pRtcPeerConnection != NULL || pRtcOutboundRtpStreamStats != NULL, STATUS_NULL_ARG);
+    CHK(pRtcPeerConnection != NULL || pRtcOutboundRtpStreamStats != NULL, STATUS_METRICS_NULL_ARG);
     PKvsRtpTransceiver pKvsRtpTransceiver = (PKvsRtpTransceiver) pTransceiver;
     if (pKvsRtpTransceiver == NULL) {
         CHK_STATUS(doubleListGetHeadNode(pKvsPeerConnection->pTransceivers, &node));
@@ -156,16 +162,18 @@ STATUS getRtpOutboundStats(PRtcPeerConnection pRtcPeerConnection, PRtcRtpTransce
     *pRtcOutboundRtpStreamStats = pKvsRtpTransceiver->outboundStats;
     MUTEX_UNLOCK(pKvsRtpTransceiver->statsLock);
 CleanUp:
+#endif
     return retStatus;
 }
 
 STATUS getRtpInboundStats(PRtcPeerConnection pRtcPeerConnection, PRtcRtpTransceiver pTransceiver, PRtcInboundRtpStreamStats pRtcInboundRtpStreamStats)
 {
     STATUS retStatus = STATUS_SUCCESS;
+#ifdef ENABLE_STREAMING
     PDoubleListNode node = NULL;
     UINT64 hashValue;
     PKvsPeerConnection pKvsPeerConnection = (PKvsPeerConnection) pRtcPeerConnection;
-    CHK(pRtcPeerConnection != NULL || pRtcInboundRtpStreamStats != NULL, STATUS_NULL_ARG);
+    CHK(pRtcPeerConnection != NULL || pRtcInboundRtpStreamStats != NULL, STATUS_METRICS_NULL_ARG);
     PKvsRtpTransceiver pKvsRtpTransceiver = (PKvsRtpTransceiver) pTransceiver;
     if (pKvsRtpTransceiver == NULL) {
         CHK_STATUS(doubleListGetHeadNode(pKvsPeerConnection->pTransceivers, &node));
@@ -179,32 +187,35 @@ STATUS getRtpInboundStats(PRtcPeerConnection pRtcPeerConnection, PRtcRtpTranscei
     *pRtcInboundRtpStreamStats = pKvsRtpTransceiver->inboundStats;
     MUTEX_UNLOCK(pKvsRtpTransceiver->statsLock);
 CleanUp:
+#endif
     return retStatus;
 }
 
+#ifdef ENABLE_DATA_CHANNEL
 STATUS getDataChannelStats(PRtcPeerConnection pRtcPeerConnection, PRtcDataChannelStats pRtcDataChannelStats)
 {
     STATUS retStatus = STATUS_SUCCESS;
     PKvsDataChannel pKvsDataChannel = NULL;
     UINT64 hashValue = 0;
     PKvsPeerConnection pKvsPeerConnection = (PKvsPeerConnection) pRtcPeerConnection;
-    CHK(pRtcPeerConnection != NULL && pRtcDataChannelStats != NULL, STATUS_NULL_ARG);
+    CHK(pRtcPeerConnection != NULL && pRtcDataChannelStats != NULL, STATUS_METRICS_NULL_ARG);
     CHK_STATUS(hashTableGet(pKvsPeerConnection->pDataChannels, pRtcDataChannelStats->dataChannelIdentifier, &hashValue));
     pKvsDataChannel = (PKvsDataChannel) hashValue;
     pRtcDataChannelStats->bytesReceived = pKvsDataChannel->rtcDataChannelDiagnostics.bytesReceived;
     pRtcDataChannelStats->bytesSent = pKvsDataChannel->rtcDataChannelDiagnostics.bytesSent;
-    STRCPY(pRtcDataChannelStats->label, pKvsDataChannel->rtcDataChannelDiagnostics.label);
+    STRNCPY(pRtcDataChannelStats->label, pKvsDataChannel->rtcDataChannelDiagnostics.label, MAX_STATS_STRING_LENGTH);
     pRtcDataChannelStats->messagesReceived = pKvsDataChannel->rtcDataChannelDiagnostics.messagesReceived;
     pRtcDataChannelStats->messagesSent = pKvsDataChannel->rtcDataChannelDiagnostics.messagesSent;
     pRtcDataChannelStats->state = pKvsDataChannel->rtcDataChannelDiagnostics.state;
 CleanUp:
     return retStatus;
 }
+#endif
 
 STATUS rtcPeerConnectionGetMetrics(PRtcPeerConnection pRtcPeerConnection, PRtcRtpTransceiver pRtcRtpTransceiver, PRtcStats pRtcMetrics)
 {
     STATUS retStatus = STATUS_SUCCESS;
-    CHK(pRtcPeerConnection != NULL && pRtcMetrics != NULL, STATUS_NULL_ARG);
+    CHK(pRtcPeerConnection != NULL && pRtcMetrics != NULL, STATUS_METRICS_NULL_ARG);
     pRtcMetrics->timestamp = GETTIME();
     switch (pRtcMetrics->requestedTypeOfStats) {
         case RTC_STATS_TYPE_CANDIDATE_PAIR:
@@ -236,7 +247,9 @@ STATUS rtcPeerConnectionGetMetrics(PRtcPeerConnection pRtcPeerConnection, PRtcRt
             break;
         case RTC_STATS_TYPE_DATA_CHANNEL:
             pRtcMetrics->timestamp = GETTIME();
+#ifdef ENABLE_DATA_CHANNEL
             CHK_STATUS(getDataChannelStats(pRtcPeerConnection, &pRtcMetrics->rtcStatsObject.rtcDataChannelStats));
+#endif
             DLOGD("RTC Data Channel Stats requested at %" PRIu64, pRtcMetrics->timestamp);
             break;
         case RTC_STATS_TYPE_CERTIFICATE:

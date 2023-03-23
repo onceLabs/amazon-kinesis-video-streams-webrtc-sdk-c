@@ -6,6 +6,7 @@
 <h4 align="center">Pure C WebRTC Client for Amazon Kinesis Video Streams </h4>
 
 <p align="center">
+  <a href="https://travis-ci.com/awslabs/amazon-kinesis-video-streams-webrtc-sdk-c"> <img src="https://travis-ci.com/awslabs/amazon-kinesis-video-streams-webrtc-sdk-c.svg?branch=master" alt="Build Status"> </a>
   <a href="https://codecov.io/gh/awslabs/amazon-kinesis-video-streams-webrtc-sdk-c"> <img src="https://codecov.io/gh/awslabs/amazon-kinesis-video-streams-webrtc-sdk-c/branch/master/graph/badge.svg" alt="Coverage Status"> </a>
 </p>
 
@@ -72,7 +73,7 @@ If you do wish to link to existing libraries you can use the following flags to 
 
 #### Cross-Compilation
 
-If you wish to cross-compile `CC` and `CXX` are respected when building the library and all its dependencies. You will also need to set `BUILD_OPENSSL_PLATFORM`, `BUILD_LIBSRTP_HOST_PLATFORM` and `BUILD_LIBSRTP_DESTINATION_PLATFORM`. See our codecov.io for an example of this. Every commit is cross compiled to ensure that it continues to work.
+If you wish to cross-compile `CC` and `CXX` are respected when building the library and all its dependencies. You will also need to set `BUILD_OPENSSL_PLATFORM`, `BUILD_LIBSRTP_HOST_PLATFORM` and `BUILD_LIBSRTP_DESTINATION_PLATFORM`. See our [.travis.yml](.travis.yml) for an example of this. Every commit is cross compiled to ensure that it continues to work.
 
 #### Static Builds
 
@@ -93,18 +94,7 @@ You can pass the following options to `cmake ..`.
 * `-DADDRESS_SANITIZER` -- Build with AddressSanitizer
 * `-DMEMORY_SANITIZER` --  Build with MemorySanitizer
 * `-DTHREAD_SANITIZER` -- Build with ThreadSanitizer
-* `-DUNDEFINED_BEHAVIOR_SANITIZER` -- Build with UndefinedBehaviorSanitizer
-* `-DLINK_PROFILER` -- Link with gperftools (available profiler options are listed [here](https://github.com/gperftools/gperftools))
-
-To clean up the `open-source` and `build` folders from previous build, use `cmake --build . --target clean` from the `build` folder
-
-For windows builds, you will have to include additional flags for libwebsockets CMake. Add the following flags to your cmake command, or edit the CMake file in ./CMake/Dependencies/libwebsockets-CMakeLists.txt with the following:
-
-```
-cmake .. -DLWS_HAVE_PTHREAD_H=1 -DLWS_EXT_PTHREAD_INCLUDE_DIR="C:\Program Files (x86)\pthreads\include" -DLWS_EXT_PTHREAD_LIBRARIES="C:\Program Files (x86)\pthreads\lib\x64\libpthreadGC2.a" -DLWS_WITH_MINIMAL_EXAMPLES=1
-```
-
-Be sure to edit the path to whatever pthread library you are using, and the proper path for your environment.
+* `-DUNDEFINED_BEHAVIOR_SANITIZER` Build with UndefinedBehaviorSanitizer`
 
 ### Build
 To build the library and the provided samples run make in the build directory you executed CMake.
@@ -154,23 +144,17 @@ export AWS_KVS_LOG_LEVEL = 2 switches on DEBUG level logs while runnning the sam
 
 Note: The default log level is `LOG_LEVEL_WARN`.
 
-* Optionally, set path to SSL CA certificate with variable (`../certs/cert.pem` is default one and points to file in this repository):
-
-```
-export AWS_KVS_CACERT_PATH=../certs/cert.pem
-```
-
 ### Running the Samples
-After executing `make` you will have the following sample applications in your `build/samples` directory:
+After executing `make` you will have the following sample applications in your `build` directory:
 
 * `kvsWebrtcClientMaster` - This application sends sample H264/Opus frames (path: `/samples/h264SampleFrames` and `/samples/opusSampleFrames`) via WebRTC. It also accepts incoming audio, if enabled in the browser. When checked in the browser, it prints the metadata of the received audio packets in your terminal.
 * `kvsWebrtcClientViewer` - This application accepts sample H264/Opus frames and prints them out.
 * `kvsWebrtcClientMasterGstSample` - This application sends sample H264/Opus frames from a GStreamer pipeline. It also will playback incoming audio via an `autoaudiosink`.
 
-Run any of the sample applications by passing to it the name that you want to give to your signaling channel. The application creates the signaling channel using the name you provide. For example, to create a signaling channel called myChannel and to start sending sample H264/Opus frames via this channel, run the following command from `build/` directory:
+Run any of the sample applications by passing to it the name that you want to give to your signaling channel. The application creates the signaling channel using the name you provide. For example, to create a signaling channel called myChannel and to start sending sample H264/Opus frames via this channel, run the following command:
 
 ```
-./samples/kvsWebrtcClientMaster myChannel
+./kvsWebrtcClientMaster myChannel
 ```
 
 When the command line application prints "Signaling client connection to socket established", you can proceed to the next step.
@@ -211,7 +195,7 @@ Note: "kinesisvideo:CreateSignalingChannel" can be removed if you are running wi
 * With the IoT certificate, IoT credentials provider endpoint (Note: it is not the endpoint on IoT AWS Console!), public key and private key ready, you can replace the static credentials provider createStaticCredentialProvider() and freeStaticCredentialProvider() with IoT credentials provider like below, the credentials provider for [samples](https://github.com/awslabs/amazon-kinesis-video-streams-webrtc-sdk-c/blob/master/samples/Common.c) is in createSampleConfiguration():
 
 ```
-createLwsIotCredentialProvider(
+iot_credential_provider_create(
             "coxxxxxxxx168.credentials.iot.us-west-2.amazonaws.com",  // IoT credentials endpoint
             "/Users/username/Downloads/iot-signaling/certificate.pem",  // path to iot certificate
             "/Users/username/Downloads/iot-signaling/private.pem.key", // path to iot private key
@@ -220,7 +204,7 @@ createLwsIotCredentialProvider(
             channelName, // iot thing name, recommended to be same as your channel name
             &pSampleConfiguration->pCredentialProvider));
 
-freeIotCredentialProvider(&pSampleConfiguration->pCredentialProvider);
+iot_credential_provider_free(&pSampleConfiguration->pCredentialProvider);
 ```
 
 ## Use Pre-generated Certificates
@@ -229,24 +213,16 @@ The certificate generating function (createCertificateAndKey) in createDtlsSessi
 **Important Note: It is recommended to rotate the certificates often - preferably for every peer connection to avoid a compromised client weakening the security of the new connections.**
 
 Take kvsWebRTCClientMaster as sample, add RtcCertificate certificates[CERT_COUNT]; to **SampleConfiguration** in Samples.h.
-Then pass in the pre-generated certificate in initializePeerConnection() in Common.c.
+Then pass in the pre-generated certificate in app_common_initializePeerConnection() in Common.c.
 
 ```
 configuration.certificates[0].pCertificate = pSampleConfiguration->certificates[0].pCertificate;
 configuration.certificates[0].pPrivateKey = pSampleConfiguration->certificates[0].pPrivateKey;
 
-where, `configuration` is of type `RtcConfiguration` in the function that calls `initializePeerConnection()`.
+where, `configuration` is of type `RtcConfiguration` in the function that calls `app_common_initializePeerConnection()`.
 
 Doing this will make sure that `createCertificateAndKey() would not execute since a certificate is already available.`
 ```
-
-## Provide Hardware Entropy Source
-
-In the mbedTLS version, the SDK uses /dev/urandom on Unix and CryptGenRandom API on Windows to get a strong entropy source. On some systems, these APIs might not be available. So, it's **strongly suggested** that you bring your own hardware entropy source. To do this, you need to follow these steps:
-
-1. Uncomment `MBEDTLS_ENTROPY_HARDWARE_ALT` in configs/config_mbedtls.h
-2. Write your own entropy source implementation by following this function signature: https://github.com/ARMmbed/mbedtls/blob/v2.25.0/include/mbedtls/entropy_poll.h#L81-L92
-3. Include your implementation source code in the linking process
 
 ## DEBUG
 ### Getting the SDPs
@@ -267,42 +243,10 @@ You can also change settings such as buffer size, number of log files for rotati
 This SDK has clang format checks enforced in builds. In order to avoid re-iterating and make sure your code
 complies, use the `scripts/check-clang.sh` to check for compliance and `scripts/clang-format.sh` to ensure compliance.
 
-## Tracing high memory and/or cpu usage
-If you would like to specifically find the code path that causes high memory and/or cpu usage, you need to recompile the SDK with this command:
-`cmake .. -DLINK_PROFILER=ON`
-
-The flag will link the SDK with [gperftools](https://github.com/gperftools/gperftools) profiler.
-
-### Heap Profile
-
-You can run your program as you normally would. You only need to specify the following environment variable to get the heap profile:
-
-`HEAPPROFILE=/tmp/heap.prof /path/to/your/binary`
-
-More information about what environment variables you can configure can be found [here](https://gperftools.github.io/gperftools/heapprofile.html)
-
-### CPU Profile
-
-Similar to the heap profile, you only need to specify the following environment variable to get the CPU profile:
-
-`CPUPROFILE=/tmp/cpu.prof /path/to/your/binary`
-
-More information about what environment variables you can configure can be found [here](https://gperftools.github.io/gperftools/cpuprofile.html)
-
-### Filtering network interfaces
-
-This is useful to reduce candidate gathering time when it is known for certain network interfaces to not work well. A sample callback is available in `Common.c`. The `iceSetInterfaceFilterFunc` in `KvsRtcConfiguration` must be set to the required callback. In the sample, it can be done this way in `initializePeerConnection()`: 
-`configuration.kvsRtcConfiguration.iceSetInterfaceFilterFunc = sampleFilterNetworkInterfaces`
-
-
 ## Documentation
 All Public APIs are documented in our [Include.h](https://github.com/awslabs/amazon-kinesis-video-streams-webrtc-sdk-c/blob/master/src/include/com/amazonaws/kinesis/video/webrtcclient/Include.h), we also generate a [Doxygen](https://awslabs.github.io/amazon-kinesis-video-streams-webrtc-sdk-c/) each commit for easier navigation.
 
 Refer to [related](#related) for more about WebRTC and KVS.
-
-## Development
-
-If you would like to contribute to the development of this project, please base your pull requests off of the `origin/develop` branch, and to the `origin/develop` branch. Commits from `develop` will be merged into master periodically as a part of each release cycle.
 
 ## Outbound hostname and port requirements
 * KVS endpoint : TCP 443 (ex: kinesisvideo.us-west-2.amazonaws.com)

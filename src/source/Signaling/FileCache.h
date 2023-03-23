@@ -1,6 +1,17 @@
-/*******************************************
-Signaling internal include file
-*******************************************/
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
 #ifndef __KINESIS_VIDEO_WEBRTC_FILE_CACHE__
 #define __KINESIS_VIDEO_WEBRTC_FILE_CACHE__
 
@@ -9,10 +20,18 @@ Signaling internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
+#include "kvs/config.h"
+#include "kvs/error.h"
+#include "kvs/common_defs.h"
+#include "kvs/webrtc_client.h"
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
 /* If SignalingFileCacheEntry layout is changed, change the version in cache file name so we wont read from older
  * cache file. */
-#define DEFAULT_CACHE_FILE_PATH                     (PCHAR) "./.SignalingCache_v0"
 #define MAX_SIGNALING_CACHE_ENTRY_TIMESTAMP_STR_LEN 10
 /* Max length for a serialized signaling cache entry. 8 accounts for 6 commas and 1 newline
  * char and null terminator */
@@ -32,9 +51,11 @@ typedef struct {
     CHAR wssEndpoint[MAX_SIGNALING_ENDPOINT_URI_LEN + 1];
 } SignalingFileCacheEntry, *PSignalingFileCacheEntry;
 
-STATUS deserializeSignalingCacheEntries(PCHAR, UINT64, PSignalingFileCacheEntry, PUINT32, PCHAR);
-STATUS signalingCacheLoadFromFile(PCHAR, PCHAR, SIGNALING_CHANNEL_ROLE_TYPE, PSignalingFileCacheEntry, PBOOL, PCHAR);
-STATUS signalingCacheSaveToFile(PSignalingFileCacheEntry, PCHAR);
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
+STATUS signalingCacheLoadFromFile(PCHAR, PCHAR, SIGNALING_CHANNEL_ROLE_TYPE, PSignalingFileCacheEntry, PBOOL);
+STATUS signalingCacheSaveToFile(PSignalingFileCacheEntry);
 
 #ifdef __cplusplus
 }

@@ -1,6 +1,17 @@
-/*******************************************
-Ice Utils internal include file
-*******************************************/
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
 #ifndef __KINESIS_VIDEO_WEBRTC_ICE_UTILS__
 #define __KINESIS_VIDEO_WEBRTC_ICE_UTILS__
 
@@ -9,11 +20,25 @@ Ice Utils internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
+#include "Stun.h"
+#include "Network.h"
+#include "SocketConnection.h"
 
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
+// #TBD, need to review this design.
 #define DEFAULT_MAX_STORED_TRANSACTION_ID_COUNT 20
 #define MAX_STORED_TRANSACTION_ID_COUNT         100
 
 #define ICE_STUN_DEFAULT_PORT 3478
+
+// Max uFrag and uPwd length as documented in https://tools.ietf.org/html/rfc5245#section-15.4
+#define ICE_MAX_UFRAG_LEN 256
+#define ICE_MAX_UPWD_LEN  256
 
 #define ICE_URL_PREFIX_STUN        "stun:"
 #define ICE_URL_PREFIX_TURN        "turn:"
@@ -21,45 +46,119 @@ extern "C" {
 #define ICE_URL_TRANSPORT_UDP      "transport=udp"
 #define ICE_URL_TRANSPORT_TCP      "transport=tcp"
 
-#define ICE_TRANSPORT_TYPE_UDP "udp"
-#define ICE_TRANSPORT_TYPE_TCP "tcp"
-#define ICE_TRANSPORT_TYPE_TLS "tls"
-
 /**
  * Ring buffer storing transactionIds
  */
 typedef struct {
-    UINT32 maxTransactionIdsCount;
-    UINT32 nextTransactionIdIndex;
+    UINT32 maxTransactionIdsCount; //!< the capacity of this transaction id buffer.
+    UINT32 nextTransactionIdIndex; //!< the index of the next available buffer.
     UINT32 earliestTransactionIdIndex;
     UINT32 transactionIdCount;
-    PBYTE transactionIds;
+    PBYTE transactionIds; //!< the buffer of transaction.
 } TransactionIdStore, *PTransactionIdStore;
 
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
+/**
+ * @brief create the buffer recording the transaction id.
+ *          For current design, ice agent, ice candidate pair, and turn will create one transaction id buffer.
+ *
+ * @param[in] maxIdCount the maximum number of transaction id.
+ * @param[out] ppTransactionIdStore the pointer of buffer.
+ * @return STATUS status of execution.
+ */
 STATUS createTransactionIdStore(UINT32, PTransactionIdStore*);
 STATUS freeTransactionIdStore(PTransactionIdStore*);
+/**
+ * @brief
+ *
+ * @param[in] pTransactionIdStore
+ * @param[in] transactionId
+ *
+ * @return VOID
+ */
 VOID transactionIdStoreInsert(PTransactionIdStore, PBYTE);
-VOID transactionIdStoreRemove(PTransactionIdStore, PBYTE);
+/**
+ * @brief
+ *
+ * @param[in] pTransactionIdStore
+ * @param[in] transactionId
+ *
+ * @return VOID
+ */
 BOOL transactionIdStoreHasId(PTransactionIdStore, PBYTE);
+/**
+ * @brief reset the buffer of transaction id.
+ *
+ * @param[in] pTransactionIdStore the transaction object.
+ *
+ * @return STATUS status of execution.
+ */
 VOID transactionIdStoreClear(PTransactionIdStore);
-
+/**
+ * @brief generate the transaction id.
+ *
+ * #TBD, this should be take care. According to rfc5389,
+ * As such, the transaction ID MUST be uniformlyand randomly chosen from the interval 0 .. 2**96-1,
+ * and SHOULD be cryptographically random.
+ *
+ * @param[in, out] pBuffer the transaction object.
+ * @param[in] bufferLen the transaction object.
+ *
+ * @return STATUS status of execution.
+ */
 STATUS iceUtilsGenerateTransactionId(PBYTE, UINT32);
-
-// Stun packaging and sending functions
+/**
+ * @brief Stun packaging and sending functions
+ *
+ * @param[in] pStunPacket
+ * @param[in] password
+ * @param[in] passwordLen
+ * @param[in] pBuffer
+ * @param[in] pBufferLen
+ *
+ * @return STATUS status of execution.
+ */
 STATUS iceUtilsPackageStunPacket(PStunPacket, PBYTE, UINT32, PBYTE, PUINT32);
+/**
+ * @brief
+ *
+ * @param[in] pStunPacket
+ * @param[in] password
+ * @param[in] passwordLen
+ * @param[in] pDest
+ * @param[in] pSocketConnection
+ * @param[in] pTurnConnection
+ * @param[in] useTurn
+ *
+ * @return STATUS status of execution
+ */
 STATUS iceUtilsSendStunPacket(PStunPacket, PBYTE, UINT32, PKvsIpAddress, PSocketConnection, struct __TurnConnection*, BOOL);
+/**
+ * @brief   send the packet via the socket of the selected ice candidate.
+ */
 STATUS iceUtilsSendData(PBYTE, UINT32, PKvsIpAddress, PSocketConnection, struct __TurnConnection*, BOOL);
 
 typedef struct {
-    BOOL isTurn;
-    BOOL isSecure;
+    BOOL isTurn;   //!< is turn server or not.
+    BOOL isSecure; //!< is secure connection or not.
     CHAR url[MAX_ICE_CONFIG_URI_LEN + 1];
     KvsIpAddress ipAddress;
     CHAR username[MAX_ICE_CONFIG_USER_NAME_LEN + 1];
     CHAR credential[MAX_ICE_CONFIG_CREDENTIAL_LEN + 1];
-    KVS_SOCKET_PROTOCOL transport;
+    KVS_SOCKET_PROTOCOL transport; //!< tcp or udp.
 } IceServer, *PIceServer;
-
+/**
+ * @brief #TBD, consider to change this api, but it is not a bottleneck.
+ *
+ * @param[in] pIceServer
+ * @param[in] url
+ * @param[in] username
+ * @param[in] credential
+ *
+ * @return STATUS status of execution.
+ */
 STATUS parseIceServer(PIceServer, PCHAR, PCHAR, PCHAR);
 
 #ifdef __cplusplus

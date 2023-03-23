@@ -10,7 +10,23 @@ StunPackager internal include file
 extern "C" {
 #endif
 
+#include "Endianness.h"
+#include "Crypto.h"
+#include "Network.h"
+
+// Max stun username attribute len: https://tools.ietf.org/html/rfc5389#section-15.3
+#define STUN_MAX_USERNAME_LEN (UINT16) 512
+
+// https://tools.ietf.org/html/rfc5389#section-15.7
+#define STUN_MAX_REALM_LEN (UINT16) 128
+
+// https://tools.ietf.org/html/rfc5389#section-15.8
+#define STUN_MAX_NONCE_LEN (UINT16) 128
+
+// https://tools.ietf.org/html/rfc5389#section-15.6
+#define STUN_MAX_ERROR_PHRASE_LEN (UINT16) 128
 /**
+ * @brief https://datatracker.ietf.org/doc/html/rfc5389#section-6
  * Stun header structure
  * - 2 UINT16 type len
  * - 2 UINT16 packet data len
@@ -134,7 +150,8 @@ extern "C" {
     putInt16((PINT16) ((pBuf) + STUN_ATTRIBUTE_HEADER_TYPE_LEN), (UINT16) (dataLen));
 
 /**
- * STUN packet types
+ * @brief   STUN packet types
+ *          https://tools.ietf.org/html/rfc5389#appendix-A
  */
 typedef enum {
     STUN_PACKET_TYPE_BINDING_REQUEST = (UINT16) 0x0001,
@@ -173,16 +190,28 @@ typedef enum {
      (getInt16(*(PINT16) pPacketBuffer) == STUN_PACKET_TYPE_CREATE_PERMISSION_ERROR_RESPONSE) ||                                                     \
      (getInt16(*(PINT16) pPacketBuffer) == STUN_PACKET_TYPE_CHANNEL_BIND_ERROR_RESPONSE))
 
+#define STUN_PACKET_GET_TYPE(pPacketBuffer) getInt16(*(PINT16) pPacketBuffer)
 /**
- * STUN error codes
+ * @brief https://datatracker.ietf.org/doc/html/rfc5766#section-6.4
+ *
  */
 typedef enum {
+    STUN_ERROR_TRY_ALTERNATE = (UINT16) 300,
+    STUN_ERROR_BAD_REQUEEST = (UINT16) 400,
     STUN_ERROR_UNAUTHORIZED = (UINT16) 401,
+    STUN_ERROR_FORBIDDEN = (UINT16) 403,
+    STUN_ERROR_UNKNOWN_ATTRIBUTE = (UINT16) 420,
+    STUN_ERROR_ALLOCATION_MISMATCH = (UINT16) 437,
     STUN_ERROR_STALE_NONCE = (UINT16) 438,
+    STUN_ERROR_WRONG_CREDENTIALS = (UINT16) 441,
+    STUN_ERROR_UNSUPPORT_TRANSPORT_ADDRESS = (UINT16) 442,
+    STUN_ERROR_ALLOCATION_QUOTA_REACHED = (UINT16) 486,
+    STUN_ERROR_INSUFFICIENT_CAPACITY = (UINT16) 508,
 } STUN_ERROR_CODE;
 
 /**
- * STUN attribute types
+ * @brief STUN attribute types
+ *  https://www.iana.org/assignments/stun-parameters/stun-parameters.xml
  */
 typedef enum {
     STUN_ATTRIBUTE_TYPE_MAPPED_ADDRESS = (UINT16) 0x0001,
@@ -196,12 +225,6 @@ typedef enum {
     STUN_ATTRIBUTE_TYPE_ERROR_CODE = (UINT16) 0x0009,
     STUN_ATTRIBUTE_TYPE_UNKNOWN_ATTRIBUTES = (UINT16) 0x000A,
     STUN_ATTRIBUTE_TYPE_REFLECTED_FROM = (UINT16) 0x000B,
-    STUN_ATTRIBUTE_TYPE_XOR_MAPPED_ADDRESS = (UINT16) 0x0020,
-    STUN_ATTRIBUTE_TYPE_PRIORITY = (UINT16) 0x0024,
-    STUN_ATTRIBUTE_TYPE_USE_CANDIDATE = (UINT16) 0x0025,
-    STUN_ATTRIBUTE_TYPE_FINGERPRINT = (UINT16) 0x8028,
-    STUN_ATTRIBUTE_TYPE_ICE_CONTROLLED = (UINT16) 0x8029,
-    STUN_ATTRIBUTE_TYPE_ICE_CONTROLLING = (UINT16) 0x802A,
     STUN_ATTRIBUTE_TYPE_CHANNEL_NUMBER = (UINT16) 0x000C,
     STUN_ATTRIBUTE_TYPE_LIFETIME = (UINT16) 0x000D,
     STUN_ATTRIBUTE_TYPE_XOR_PEER_ADDRESS = (UINT16) 0x0012,
@@ -212,8 +235,29 @@ typedef enum {
     STUN_ATTRIBUTE_TYPE_EVEN_PORT = (UINT16) 0x0018,
     STUN_ATTRIBUTE_TYPE_REQUESTED_TRANSPORT = (UINT16) 0x0019,
     STUN_ATTRIBUTE_TYPE_DONT_FRAGMENT = (UINT16) 0x001A,
+    STUN_ATTRIBUTE_TYPE_XOR_MAPPED_ADDRESS = (UINT16) 0x0020,
     STUN_ATTRIBUTE_TYPE_RESERVATION_TOKEN = (UINT16) 0x0022,
+    STUN_ATTRIBUTE_TYPE_PRIORITY = (UINT16) 0x0024,      //!< https://datatracker.ietf.org/doc/html/rfc8445#section-7.1.1
+                                                         //!< https://datatracker.ietf.org/doc/html/rfc8445#section-5.1.2
+    STUN_ATTRIBUTE_TYPE_USE_CANDIDATE = (UINT16) 0x0025, //!< https://datatracker.ietf.org/doc/html/rfc8445#section-7.1.2
 
+    STUN_ATTRIBUTE_TYPE_SOFTWARE = (UINT16) 0x8022,
+    STUN_ATTRIBUTE_TYPE_ALTERNATE_SERVER = (UINT16) 0x8023,
+    STUN_ATTRIBUTE_TYPE_FINGERPRINT = (UINT16) 0x8028,
+    STUN_ATTRIBUTE_TYPE_ICE_CONTROLLED = (UINT16) 0x8029,  //!< https://datatracker.ietf.org/doc/html/rfc8445#section-7.1.3
+    STUN_ATTRIBUTE_TYPE_ICE_CONTROLLING = (UINT16) 0x802A, //!< https://datatracker.ietf.org/doc/html/rfc8445#section-7.1.3
+
+    // #TBD
+    STUN_ATTRIBUTE_TYPE_NOMINATION = (UINT16) 0xC001,
+    STUN_ATTRIBUTE_TYPE_GOOG_NETWORK_INFO = (UINT16) 0xC057, //!< (network-id << 16) | network-cost.
+    STUN_ATTRIBUTE_TYPE_GOOG_LAST_ICE_CHECK_RECEIVED = (UINT16) 0xC058,
+    STUN_ATTRIBUTE_TYPE_GOOG_MISC_INFO = (UINT16) 0xC059,
+    STUN_ATTRIBUTE_TYPE_GOOG_OBSOLETE_1 = (UINT16) 0xC05A,
+    STUN_ATTRIBUTE_TYPE_GOOG_CONNECTION_ID = (UINT16) 0xC05B,
+    STUN_ATTRIBUTE_TYPE_GOOG_DELTA = (UINT16) 0xC05C,
+    STUN_ATTRIBUTE_TYPE_GOOG_DELTA_ACK = (UINT16) 0xC05D,
+    STUN_ATTRIBUTE_TYPE_GOOG_MESSAGE_INTEGRITY = (UINT16) 0xC060,
+    STUN_ATTRIBUTE_TYPE_RETRANSMIT_COUNT = (UINT16) 0xFF00,
 } STUN_ATTRIBUTE_TYPE;
 
 /**
@@ -367,10 +411,42 @@ typedef struct {
     // Stun attributes
     PStunAttributeHeader* attributeList;
 } StunPacket, *PStunPacket;
-
+/**
+ * @brief
+ *
+ * @param[in] pStunPacket
+ * @param[in] password
+ * @param[in] passwordLen
+ * @param[in] generateMessageIntegrity
+ * @param[in] generateFingerprint
+ * @param[in] pBuffer
+ * @param[in] pSize
+ *
+ * @return STATUS status of execution.
+ */
 STATUS serializeStunPacket(PStunPacket, PBYTE, UINT32, BOOL, BOOL, PBYTE, PUINT32);
+/**
+ * @brief
+ *
+ * @param[in] pStunBuffer
+ * @param[in] bufferSize
+ * @param[in] password
+ * @param[in] passwordLen
+ * @param[in, out] ppStunPacket
+ *
+ * @return STATUS status of execution.
+ */
 STATUS deserializeStunPacket(PBYTE, UINT32, PBYTE, UINT32, PStunPacket*);
 STATUS freeStunPacket(PStunPacket*);
+/**
+ * @brief create the stun packet.
+ *
+ * @param[in] stunPacketType the stun packet type.
+ * @param[in] transactionId the tranction id.
+ * @param[in, out] ppStunPacket return the buffer of the stun packet.
+ *
+ * @return STATUS status of execution.
+ */
 STATUS createStunPacket(STUN_PACKET_TYPE, PBYTE, PStunPacket*);
 STATUS appendStunAddressAttribute(PStunPacket, STUN_ATTRIBUTE_TYPE, PKvsIpAddress);
 STATUS appendStunUsernameAttribute(PStunPacket, PCHAR);

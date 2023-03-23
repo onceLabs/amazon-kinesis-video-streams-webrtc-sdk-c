@@ -1,20 +1,42 @@
-/**
- * Kinesis Video Producer Ice Utils
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
  */
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
 #define LOG_CLASS "IceUtils"
 #include "../Include_i.h"
+#include "Endianness.h"
+#include "TurnConnection.h"
 
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 STATUS createTransactionIdStore(UINT32 maxIdCount, PTransactionIdStore* ppTransactionIdStore)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PTransactionIdStore pTransactionIdStore = NULL;
 
-    CHK(ppTransactionIdStore != NULL, STATUS_NULL_ARG);
-    CHK(maxIdCount < MAX_STORED_TRANSACTION_ID_COUNT && maxIdCount > 0, STATUS_INVALID_ARG);
+    CHK(ppTransactionIdStore != NULL, STATUS_ICE_UTILS_NULL_ARG);
+    CHK(maxIdCount < MAX_STORED_TRANSACTION_ID_COUNT && maxIdCount > 0, STATUS_ICE_UTILS_NULL_ARG);
 
     pTransactionIdStore = (PTransactionIdStore) MEMCALLOC(1, SIZEOF(TransactionIdStore) + STUN_TRANSACTION_ID_LEN * maxIdCount);
-    CHK(pTransactionIdStore != NULL, STATUS_NOT_ENOUGH_MEMORY);
+    CHK(pTransactionIdStore != NULL, STATUS_ICE_UTILS_NOT_ENOUGH_MEMORY);
 
     pTransactionIdStore->transactionIds = (PBYTE) (pTransactionIdStore + 1);
     pTransactionIdStore->maxTransactionIdsCount = maxIdCount;
@@ -59,12 +81,13 @@ VOID transactionIdStoreInsert(PTransactionIdStore pTransactionIdStore, PBYTE tra
 
     CHECK(pTransactionIdStore != NULL);
 
+    // get the available buffer.
     storeLocation = pTransactionIdStore->transactionIds +
         ((pTransactionIdStore->nextTransactionIdIndex % pTransactionIdStore->maxTransactionIdsCount) * STUN_TRANSACTION_ID_LEN);
     MEMCPY(storeLocation, transactionId, STUN_TRANSACTION_ID_LEN);
-
+    // move the next index.
     pTransactionIdStore->nextTransactionIdIndex = (pTransactionIdStore->nextTransactionIdIndex + 1) % pTransactionIdStore->maxTransactionIdsCount;
-
+    // #TBD, need to enhance.  Based on the current coding, no need to code it.
     if (pTransactionIdStore->nextTransactionIdIndex == pTransactionIdStore->earliestTransactionIdIndex) {
         pTransactionIdStore->earliestTransactionIdIndex =
             (pTransactionIdStore->earliestTransactionIdIndex + 1) % pTransactionIdStore->maxTransactionIdsCount;
@@ -89,22 +112,6 @@ BOOL transactionIdStoreHasId(PTransactionIdStore pTransactionIdStore, PBYTE tran
     }
 
     return idFound;
-}
-
-VOID transactionIdStoreRemove(PTransactionIdStore pTransactionIdStore, PBYTE transactionId)
-{
-    UINT32 i, j;
-
-    CHECK(pTransactionIdStore != NULL);
-
-    for (i = pTransactionIdStore->earliestTransactionIdIndex, j = 0; j < pTransactionIdStore->maxTransactionIdsCount; ++j) {
-        if (MEMCMP(transactionId, pTransactionIdStore->transactionIds + i * STUN_TRANSACTION_ID_LEN, STUN_TRANSACTION_ID_LEN) == 0) {
-            MEMSET(pTransactionIdStore->transactionIds + i * STUN_TRANSACTION_ID_LEN, 0x00, STUN_TRANSACTION_ID_LEN);
-            return;
-        }
-
-        i = (i + 1) % pTransactionIdStore->maxTransactionIdsCount;
-    }
 }
 
 VOID transactionIdStoreClear(PTransactionIdStore pTransactionIdStore)
@@ -181,7 +188,7 @@ STATUS iceUtilsSendData(PBYTE buffer, UINT32 size, PKvsIpAddress pDest, PSocketC
     STATUS retStatus = STATUS_SUCCESS;
 
     CHK((pSocketConnection != NULL && !useTurn) || (pTurnConnection != NULL && useTurn), STATUS_INVALID_ARG);
-
+    // if you are using turn connection, you need to transfer the ip of this destination.
     if (useTurn) {
         retStatus = turnConnectionSendData(pTurnConnection, buffer, size, pDest);
     } else {
@@ -189,7 +196,8 @@ STATUS iceUtilsSendData(PBYTE buffer, UINT32 size, PKvsIpAddress pDest, PSocketC
     }
 
     // Fix-up the not-yet-ready socket
-    CHK(STATUS_SUCCEEDED(retStatus) || retStatus == STATUS_SOCKET_CONNECTION_NOT_READY_TO_SEND, retStatus);
+    // #TBD.
+    CHK(STATUS_SUCCEEDED(retStatus) || retStatus == STATUS_TLS_CONNECTION_NOT_READY_TO_SEND, retStatus);
     retStatus = STATUS_SUCCESS;
 
 CleanUp:
@@ -214,8 +222,8 @@ STATUS parseIceServer(PIceServer pIceServer, PCHAR url, PCHAR username, PCHAR cr
         pIceServer->isTurn = FALSE;
     } else if (STRNCMP(ICE_URL_PREFIX_TURN, url, STRLEN(ICE_URL_PREFIX_TURN)) == 0 ||
                STRNCMP(ICE_URL_PREFIX_TURN_SECURE, url, STRLEN(ICE_URL_PREFIX_TURN_SECURE)) == 0) {
-        CHK(username != NULL && username[0] != '\0', STATUS_ICE_URL_TURN_MISSING_USERNAME);
-        CHK(credential != NULL && credential[0] != '\0', STATUS_ICE_URL_TURN_MISSING_CREDENTIAL);
+        CHK(username != NULL && username[0] != '\0', STATUS_ICE_UTILS_URL_TURN_MISSING_USERNAME);
+        CHK(credential != NULL && credential[0] != '\0', STATUS_ICE_UTILS_URL_TURN_MISSING_CREDENTIAL);
 
         // TODO after getIceServerConfig no longer give turn: ips, do TLS only for turns:
         STRNCPY(pIceServer->username, username, MAX_ICE_CONFIG_USER_NAME_LEN);
@@ -232,7 +240,7 @@ STATUS parseIceServer(PIceServer pIceServer, PCHAR url, PCHAR username, PCHAR cr
         }
 
     } else {
-        CHK(FALSE, STATUS_ICE_URL_INVALID_PREFIX);
+        CHK(FALSE, STATUS_ICE_UTILS_URL_INVALID_PREFIX);
     }
 
     if ((separator = STRCHR(urlNoPrefix, ':')) != NULL) {

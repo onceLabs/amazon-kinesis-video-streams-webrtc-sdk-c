@@ -10,6 +10,17 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "TimerQueue.h"
+#include "Crypto.h"
+#include "Network.h"
+#include "IOBuffer.h"
+
+#ifdef KVS_USE_OPENSSL
+// TBD
+#elif KVS_USE_MBEDTLS
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
+#endif
 
 #define MAX_SRTP_MASTER_KEY_LEN   16
 #define MAX_SRTP_SALT_KEY_LEN     14
@@ -18,8 +29,7 @@ extern "C" {
 
 #define GENERATED_CERTIFICATE_MAX_SIZE 4096
 #define GENERATED_CERTIFICATE_BITS     2048
-#define DTLS_CERT_MIN_SERIAL_NUM_SIZE  8
-#define DTLS_CERT_MAX_SERIAL_NUM_SIZE  20
+#define GENERATED_CERTIFICATE_SERIAL   1
 #define GENERATED_CERTIFICATE_DAYS     365
 #define GENERATED_CERTIFICATE_NAME     "KVS-WebRTC-Client"
 #define KEYING_EXTRACTOR_LABEL         "EXTRACTOR-dtls_srtp"
@@ -51,7 +61,7 @@ typedef VOID (*DtlsSessionOnStateChange)(UINT64, RTC_DTLS_TRANSPORT_STATE);
 
 typedef struct {
     UINT64 outBoundPacketFnCustomData;
-    DtlsSessionOutboundPacketFunc outboundPacketFn;
+    DtlsSessionOutboundPacketFunc outboundPacketFn; //!< outBoundPacketFn is a required callback to tell DtlsSession how to send outbound packets
     UINT64 stateChangeFnCustomData;
     DtlsSessionOnStateChange stateChangeFn;
 } DtlsSessionCallbacks, *PDtlsSessionCallbacks;
@@ -157,11 +167,37 @@ STATUS freeDtlsSession(PDtlsSession*);
  * @return STATUS - status of operation
  */
 STATUS dtlsSessionStart(PDtlsSession, BOOL);
+/**
+ * @brief The handler of dtls inbound packets.
+ *
+ * @param[in] pDtlsSession the context of the dtls session.
+ * @param[in] pData
+ * @param[in] pDataLen
+ *
+ * @return STATUS status of execution.
+ */
 STATUS dtlsSessionProcessPacket(PDtlsSession, PBYTE, PINT32);
+/**
+ * @brief Is the dtls session connected.
+ *
+ * @param[in] pDtlsSession the context of the dtls session.
+ * @param[in, out] pIsConnected is connected or not.
+ *
+ * @return STATUS status of execution.
+ */
 STATUS dtlsSessionIsInitFinished(PDtlsSession, PBOOL);
 STATUS dtlsSessionPopulateKeyingMaterial(PDtlsSession, PDtlsKeyingMaterial);
 STATUS dtlsSessionGetLocalCertificateFingerprint(PDtlsSession, PCHAR, UINT32);
 STATUS dtlsSessionVerifyRemoteCertificateFingerprint(PDtlsSession, PCHAR);
+/**
+ * @brief  it is used for the outbound packet of sctp session.
+ *
+ * @param[in] pDtlsSession the handler of the dtls session
+ * @param[in] pData the buffer
+ * @param[in] dataLen the length of the buffer
+ *
+ * @return STATUS_SUCCESS
+ */
 STATUS dtlsSessionPutApplicationData(PDtlsSession, PBYTE, INT32);
 STATUS dtlsSessionShutdown(PDtlsSession);
 
@@ -172,15 +208,12 @@ STATUS dtlsSessionOnStateChange(PDtlsSession, UINT64, DtlsSessionOnStateChange);
 STATUS dtlsValidateRtcCertificates(PRtcCertificate, PUINT32);
 STATUS dtlsSessionChangeState(PDtlsSession, RTC_DTLS_TRANSPORT_STATE);
 
-STATUS dtlsFillPseudoRandomBits(PBYTE, UINT32);
-
 #ifdef KVS_USE_OPENSSL
 STATUS dtlsCheckOutgoingDataBuffer(PDtlsSession);
 STATUS dtlsCertificateFingerprint(X509*, PCHAR);
 STATUS dtlsGenerateCertificateFingerprints(PDtlsSession, PDtlsSessionCertificateInfo);
 STATUS createCertificateAndKey(INT32, BOOL, X509** ppCert, EVP_PKEY** ppPkey);
 STATUS freeCertificateAndKey(X509** ppCert, EVP_PKEY** ppPkey);
-STATUS dtlsValidateRtcCertificates(PRtcCertificate, PUINT32);
 STATUS createSslCtx(PDtlsSessionCertificateInfo, UINT32, SSL_CTX**);
 #elif KVS_USE_MBEDTLS
 STATUS dtlsCertificateFingerprint(mbedtls_x509_crt*, PCHAR);
@@ -191,6 +224,15 @@ STATUS freeCertificateAndKey(mbedtls_x509_crt*, mbedtls_pk_context*);
 // following are required callbacks for mbedtls
 // NOTE: const is not a pure C qualifier, they're here because there's no way to type cast
 //       a callback signature.
+/**
+ * @brief   the callback of outboud for ssl library.
+ *
+ * @param[in] customData the custom data
+ * @param[in] pBuf the buffer to be sent
+ * @param[in] len the length of the buffer
+ *
+ * @return error code. 0: success.
+ */
 INT32 dtlsSessionSendCallback(PVOID, const unsigned char*, ULONG);
 INT32 dtlsSessionReceiveCallback(PVOID, unsigned char*, ULONG);
 VOID dtlsSessionSetTimerCallback(PVOID, UINT32, UINT32);

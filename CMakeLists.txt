@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.6.3)
+cmake_minimum_required(VERSION 2.8)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake;${CMAKE_MODULE_PATH}")
 include(Utilities)
 include(CheckIncludeFiles)
@@ -9,60 +9,57 @@ project(KinesisVideoWebRTCClient LANGUAGES C)
 # User Flags
 option(ADD_MUCLIBC "Add -muclibc c flag" OFF)
 option(BUILD_DEPENDENCIES "Whether or not to build depending libraries from source" ON)
-option(USE_OPENSSL "Use openssl as crypto library" ON)
-option(USE_MBEDTLS "Use mbedtls as crypto library" OFF)
+option(USE_OPENSSL "Use openssl as crypto library" OFF)
+option(USE_MBEDTLS "Use mbedtls as crypto library" ON)
 option(BUILD_STATIC_LIBS "Build all libraries statically. (This includes third-party libraries.)" OFF)
 option(BUILD_OPENSSL_PLATFORM "If buildng OpenSSL what is the target platform" OFF)
 option(BUILD_LIBSRTP_HOST_PLATFORM "If buildng LibSRTP what is the current platform" OFF)
 option(BUILD_LIBSRTP_DESTINATION_PLATFORM "If buildng LibSRTP what is the destination platform" OFF)
 option(BUILD_SAMPLE "Build available samples" ON)
-option(ENABLE_DATA_CHANNEL "Enable support for data channel" ON)
-option(INSTRUMENTED_ALLOCATORS "Enable memory instrumentation" OFF)
+option(ENABLE_DATA_CHANNEL "Enable support for data channel" ON)## withhout sample code. experimental option.
+option(ENABLE_STREAMING "Enable support for streaming" ON)## withhout sample code. experimental option.
+option(BUILD_CLIENT "Build client." ON)## withhout sample code. experimental option.
 
 # Developer Flags
 option(BUILD_TEST "Build the testing tree." OFF)
-option(BUILD_BENCHMARK "Build the benchmark tree." OFF)
 option(CODE_COVERAGE "Enable coverage reporting" OFF)
 option(COMPILER_WARNINGS "Enable all compiler warnings." OFF)
 option(ADDRESS_SANITIZER "Build with AddressSanitizer." OFF)
 option(MEMORY_SANITIZER "Build with MemorySanitizer." OFF)
 option(THREAD_SANITIZER "Build with ThreadSanitizer." OFF)
 option(UNDEFINED_BEHAVIOR_SANITIZER "Build with UndefinedBehaviorSanitizer." OFF)
-option(LINK_PROFILER "Link gperftools profiler" OFF)
 
-execute_process(
-        COMMAND git rev-parse HEAD
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE GIT_COMMIT_HASH
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
+option(KVS_PLAT_ESP_FREERTOS "Build for ESP FreeRTOS" OFF)
 
-add_definitions(-DSDK_VERSION=\"${GIT_COMMIT_HASH}\")
-add_definitions(-DDETECTED_GIT_HASH)
-
-if(NOT OPEN_SRC_INSTALL_PREFIX OR OPEN_SRC_INSTALL_PREFIX STREQUAL "")
-  set(OPEN_SRC_INSTALL_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/open-source" CACHE PATH "Libraries will be downloaded and built in this directory.")
-else()
-  set(OPEN_SRC_INSTALL_PREFIX ${OPEN_SRC_INSTALL_PREFIX} CACHE PATH "Libraries will be downloaded and built in this directory.")
+if(KVS_PLAT_ESP_FREERTOS)
+  add_definitions(-DKVS_PLAT_ESP_FREERTOS)
 endif()
 
 if(NOT WIN32)
-CHECK_INCLUDE_FILES(ifaddrs.h       KVSWEBRTC_HAVE_IFADDRS_H)
-if(NOT KVSWEBRTC_HAVE_IFADDRS_H)
-  message(FATAL_ERROR "Platform should support the ifaddrs interface.")
+
+CHECK_INCLUDE_FILES(ifaddrs.h KVSWEBRTC_HAVE_IFADDRS_H)
+if(KVSWEBRTC_HAVE_IFADDRS_H)
+  add_definitions(-DKVSWEBRTC_HAVE_IFADDRS_H)
 endif()
-CHECK_FUNCTION_EXISTS(getifaddrs    KVSWEBRTC_HAVE_GETIFADDRS)
-if(NOT KVSWEBRTC_HAVE_GETIFADDRS)
-  message(FATAL_ERROR "Platform should support getifaddrs API.")
+
+CHECK_FUNCTION_EXISTS(getifaddrs KVSWEBRTC_HAVE_GETIFADDRS)
+if(KVSWEBRTC_HAVE_GETIFADDRS)
+  add_definitions(-DKVSWEBRTC_HAVE_GETIFADDRS)
+endif()
+
+CHECK_FUNCTION_EXISTS(getenv KVSWEBRTC_HAVE_GETENV)
+if(KVSWEBRTC_HAVE_GETENV)
+  add_definitions(-DKVSWEBRTC_HAVE_GETENV)
+endif()
+
+CHECK_INCLUDE_FILES(netinet/tcp.h   KVSWEBRTC_HAVE_NETINET_TCP_H)
+if(KVSWEBRTC_HAVE_NETINET_TCP_H)
+  add_definitions(-DKVSWEBRTC_HAVE_NETINET_TCP_H)
 endif()
 endif()
 
 set(CMAKE_MACOSX_RPATH TRUE)
 get_filename_component(ROOT "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
-
-if (LINK_PROFILER)
-  add_link_options("-Wl,--no-as-needed")
-endif()
-
 
 # static settings
 if(BUILD_STATIC_LIBS OR WIN32)
@@ -91,12 +88,10 @@ if(USE_OPENSSL)
   add_definitions(-DKVS_USE_OPENSSL)
 elseif(USE_MBEDTLS)
   add_definitions(-DKVS_USE_MBEDTLS)
-  # FIXME: there's probably a better way to inject MBEDTLS_USER_CONFIG_FILE flag without mutating the global CMAKE_C_FLAGS and CMAKE_CXX_FLAGS
-  set(CMAKE_C_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/configs -DMBEDTLS_USER_CONFIG_FILE='<config_mbedtls.h>' ${CMAKE_C_FLAGS}")
-  set(CMAKE_CXX_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/configs -DMBEDTLS_USER_CONFIG_FILE='<config_mbedtls.h>' ${CMAKE_CXX_FLAGS}")
 endif()
 
 if(BUILD_DEPENDENCIES)
+  set(OPEN_SRC_INSTALL_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/open-source)
   if(NOT EXISTS ${OPEN_SRC_INSTALL_PREFIX})
     file(MAKE_DIRECTORY ${OPEN_SRC_INSTALL_PREFIX})
   endif()
@@ -120,49 +115,33 @@ if(BUILD_DEPENDENCIES)
     build_dependency(openssl ${BUILD_ARGS})
     set(OPENSSL_ROOT_DIR ${OPEN_SRC_INSTALL_PREFIX})
   elseif(USE_MBEDTLS)
-    set(BUILD_ARGS -DBUILD_STATIC_LIBS=${BUILD_STATIC_LIBS}
-                   -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS})
+    set(BUILD_ARGS -DBUILD_STATIC_LIBS=${BUILD_STATIC_LIBS})
     build_dependency(mbedtls ${BUILD_ARGS})
   endif()
-
 
   set(BUILD_ARGS -DBUILD_STATIC_LIBS=${BUILD_STATIC_LIBS}
                  -DOPENSSL_DIR=${OPEN_SRC_INSTALL_PREFIX}
                  -DUSE_OPENSSL=${USE_OPENSSL}
-                 -DUSE_MBEDTLS=${USE_MBEDTLS}
-                 -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS})
+                 -DUSE_MBEDTLS=${USE_MBEDTLS})
   build_dependency(websockets ${BUILD_ARGS})
+  if(ENABLE_STREAMING)
+    set(BUILD_ARGS
+        -DBUILD_STATIC_LIBS=${BUILD_STATIC_LIBS}
+        -DOPENSSL_DIR=${OPEN_SRC_INSTALL_PREFIX}
+        -DBUILD_LIBSRTP_HOST_PLATFORM=${BUILD_LIBSRTP_HOST_PLATFORM}
+        -DBUILD_LIBSRTP_DESTINATION_PLATFORM=${BUILD_LIBSRTP_DESTINATION_PLATFORM}
+        -DUSE_OPENSSL=${USE_OPENSSL}
+        -DUSE_MBEDTLS=${USE_MBEDTLS}
+    )
+    build_dependency(srtp ${BUILD_ARGS})
+  endif()
+  if(ENABLE_DATA_CHANNEL)
+    build_dependency(usrsctp)
+  endif()
 
-  set(BUILD_ARGS
-      -DBUILD_STATIC_LIBS=${BUILD_STATIC_LIBS}
-      -DOPENSSL_DIR=${OPEN_SRC_INSTALL_PREFIX}
-      -DBUILD_LIBSRTP_HOST_PLATFORM=${BUILD_LIBSRTP_HOST_PLATFORM}
-      -DBUILD_LIBSRTP_DESTINATION_PLATFORM=${BUILD_LIBSRTP_DESTINATION_PLATFORM}
-      -DUSE_OPENSSL=${USE_OPENSSL}
-      -DUSE_MBEDTLS=${USE_MBEDTLS}
-  )
-  build_dependency(srtp ${BUILD_ARGS})
-
-  build_dependency(usrsctp)
   if(BUILD_TEST)
     build_dependency(gtest)
   endif()
-
-  if(BUILD_BENCHMARK)
-    build_dependency(benchmark)
-  endif()
-
-  if (LINK_PROFILER)
-    build_dependency(gperftools)
-  endif()
-
-  # building kvsCommonLws also builds kvspic
-  set(BUILD_ARGS
-      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-      -DUSE_OPENSSL=${USE_OPENSSL}
-      -DUSE_MBEDTLS=${USE_MBEDTLS}
-      -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS})
-  build_dependency(kvsCommonLws ${BUILD_ARGS})
 
   message(STATUS "Finished building dependencies.")
 endif()
@@ -175,36 +154,45 @@ if (USE_OPENSSL)
   find_package(OpenSSL REQUIRED)
   set(OPEN_SRC_INCLUDE_DIRS ${OPEN_SRC_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
 else()
-  find_package(MbedTLS REQUIRED)
-  set(OPEN_SRC_INCLUDE_DIRS ${OPEN_SRC_INCLUDE_DIRS} ${MBEDTLS_INCLUDE_DIRS})
-endif()
-
-if (OPEN_SRC_INSTALL_PREFIX)
-  find_library(SRTP_LIBRARIES srtp2 REQUIRED PATHS ${OPEN_SRC_INSTALL_PREFIX})
-
-  if (LINK_PROFILER)
-    find_library(GPERFTOOLS_MALLOC_LIBRARIES tcmalloc REQUIRED PATHS ${OPEN_SRC_INSTALL_PREFIX})
-    find_library(GPERFTOOLS_PROFILER_LIBRARIES profiler REQUIRED PATHS ${OPEN_SRC_INSTALL_PREFIX})
-  endif()
-else()
-  find_library(SRTP_LIBRARIES srtp2 REQUIRED )
-  if (LINK_PROFILER)
-    find_library(GPERFTOOLS_MALLOC_LIBRARIES tcmalloc REQUIRED)
-    find_library(GPERFTOOLS_PROFILER_LIBRARIES profiler REQUIRED)
+  if(NOT KVS_PLAT_ESP_FREERTOS)
+    find_package(MbedTLS REQUIRED)
+    set(OPEN_SRC_INCLUDE_DIRS ${OPEN_SRC_INCLUDE_DIRS} ${MBEDTLS_INCLUDE_DIRS})
   endif()
 endif()
 
-if (WIN32)
-  SET(LIBWEBSOCKETS_LIBRARIES "websockets.lib")
-else()
-  pkg_check_modules(LIBWEBSOCKETS REQUIRED libwebsockets)
+if (ENABLE_STREAMING AND NOT KVS_PLAT_ESP_FREERTOS)
+  if (OPEN_SRC_INSTALL_PREFIX)
+    find_library(LLHTTP_LIBRARIES llhttp REQUIRED PATHS ${OPEN_SRC_INSTALL_PREFIX})
+  else()
+    find_library(LLHTTP_LIBRARIES llhttp REQUIRED )
+  endif()
 endif()
 
-# usrsctp dont support pkgconfig yet
-find_library(
-  Usrsctp
-  NAMES ${USRSCTP_LIBNAME} usrsctp REQUIRED
-  PATHS ${OPEN_SRC_INSTALL_PREFIX}/lib)
+if (ENABLE_STREAMING AND NOT KVS_PLAT_ESP_FREERTOS)
+  if (OPEN_SRC_INSTALL_PREFIX)
+    find_library(WSLAY_LIBRARIES wslay REQUIRED PATHS ${OPEN_SRC_INSTALL_PREFIX})
+  else()
+    find_library(WSLAY_LIBRARIES wslay REQUIRED )
+  endif()
+endif()
+
+if (ENABLE_STREAMING AND NOT KVS_PLAT_ESP_FREERTOS)
+  if (OPEN_SRC_INSTALL_PREFIX)
+    find_library(SRTP_LIBRARIES srtp2 REQUIRED PATHS ${OPEN_SRC_INSTALL_PREFIX})
+  else()
+    find_library(SRTP_LIBRARIES srtp2 REQUIRED )
+  endif()
+endif()
+
+if(ENABLE_DATA_CHANNEL)
+  # usrsctp dont support pkgconfig yet
+  if(NOT KVS_PLAT_ESP_FREERTOS)
+    find_library(
+      Usrsctp
+      NAMES ${USRSCTP_LIBNAME} usrsctp REQUIRED
+      PATHS ${OPEN_SRC_INSTALL_PREFIX}/lib)
+    endif()
+endif()
 
 set(OPEN_SRC_INCLUDE_DIRS ${OPEN_SRC_INCLUDE_DIRS} ${LIBSRTP_INCLUDE_DIRS}
                           ${CURL_INCLUDE_DIRS} ${LIBWEBSOCKETS_INCLUDE_DIRS})
@@ -212,6 +200,35 @@ set(OPEN_SRC_INCLUDE_DIRS ${OPEN_SRC_INCLUDE_DIRS} ${LIBSRTP_INCLUDE_DIRS}
 link_directories(${LIBSRTP_LIBRARY_DIRS})
 link_directories(${LIBWEBSOCKETS_LIBRARY_DIRS})
 link_directories(${OPEN_SRC_INSTALL_PREFIX}/lib)
+
+pkg_check_modules(GST gstreamer-1.0)
+if(GST_FOUND)
+
+  if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/local/opt/libffi/lib/pkgconfig")
+    find_library(Intl "intl" REQUIRED PATHS "/usr/local/opt/gettext/lib")
+    link_directories("/usr/local/opt/gettext/lib")
+  endif()
+
+  pkg_check_modules(GLIB2 REQUIRED glib-2.0)
+  pkg_check_modules(GST_APP REQUIRED gstreamer-app-1.0)
+  pkg_check_modules(GOBJ2 REQUIRED gobject-2.0)
+  message("gstreamer found. Will build gstreamer samples")
+
+  set(OPEN_SRC_INCLUDE_DIRS
+      ${OPEN_SRC_INCLUDE_DIRS} ${GLIB2_INCLUDE_DIRS} ${GST_INCLUDE_DIRS}
+      ${GST_APP_INCLUDE_DIRS} ${GOBJ2_INCLUDE_DIRS})
+
+  set(GST_SAMPLE_LIBRARIES ${GLIB2_LIBRARIES} ${GST_LIBRARIES}
+                           ${GST_APP_LIBRARIES} ${GOBJ2_LIBRARIES} ${Intl})
+
+  link_directories(${GLIB2_LIBRARY_DIRS})
+  link_directories(${GST_LIBRARY_DIRS})
+  link_directories(${GST_APP_LIBRARY_DIRS})
+  link_directories(${GOBJ2_LIBRARY_DIRS})
+else()
+  message("gstreamer not found. Will not build gstreamer samples")
+endif()
 
 ############# find dependent libraries end ############
 
@@ -252,19 +269,29 @@ endif()
 # Uncomment below line for very verbose logging
 # add_definitions(-DLOG_STREAMING)
 
+# Uncomment below line for mbedtls debug log
+# add_definitions(-DMBEDTLS_DEBUG_LOG)
+
+if(BUILD_CLIENT)
+  add_definitions(-DBUILD_CLIENT)
+endif()
+if (ENABLE_STREAMING)
+  add_definitions(-DENABLE_STREAMING)
+endif()
 if (ENABLE_DATA_CHANNEL)
   add_definitions(-DENABLE_DATA_CHANNEL)
 endif()
 
-if (INSTRUMENTED_ALLOCATORS)
-  add_definitions(-DINSTRUMENTED_ALLOCATORS)
-endif()
+file(GLOB WEBRTC_STATE_MACHINE_SOURCE_FILES "src/source/StateMachine/*.c")
+file(GLOB WEBRTC_UTILS_SOURCE_FILES "src/source/Utils/*.c")
 
 file(
   GLOB
   WEBRTC_CLIENT_SOURCE_FILES
   "src/source/Crypto/*.c"
   "src/source/Ice/*.c"
+  "src/source/Json/*.c"
+  "src/source/Net/*.c"
   "src/source/PeerConnection/*.c"
   "src/source/Rtcp/*.c"
   "src/source/Rtp/*.c"
@@ -281,46 +308,77 @@ elseif (USE_MBEDTLS)
   list(FILTER WEBRTC_CLIENT_SOURCE_FILES EXCLUDE REGEX ".*_openssl\\.c")
 endif()
 
-file(GLOB WEBRTC_SIGNALING_CLIENT_SOURCE_FILES "src/source/Signaling/*.c")
-
+file(
+  GLOB
+  WEBRTC_SIGNALING_CLIENT_SOURCE_FILES
+  "src/source/Credential/*.c"
+  "src/source/ApiCall/*.c"
+  "src/source/Signaling/*.c"
+  )
 
 include_directories(${OPEN_SRC_INCLUDE_DIRS})
 include_directories(${OPEN_SRC_INSTALL_PREFIX}/include)
 include_directories(${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/src/include)
-include_directories(${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/src/ice)
 
-add_library(kvsWebrtcClient ${LINKAGE} ${WEBRTC_CLIENT_SOURCE_FILES})
+add_library(kvsWebrtcStateMachine STATIC ${WEBRTC_STATE_MACHINE_SOURCE_FILES})
+target_link_libraries(kvsWebrtcStateMachine)
 
-target_link_libraries(
-  kvsWebrtcClient
-  PRIVATE kvspicUtils
-          kvspicState
-          ${CMAKE_THREAD_LIBS_INIT}
-          ${OPENSSL_SSL_LIBRARY}
-          ${OPENSSL_CRYPTO_LIBRARY}
-          ${SRTP_LIBRARIES}
-          ${Usrsctp}
-          ${MBEDTLS_LIBRARIES}
-          ${GPERFTOOLS_MALLOC_LIBRARIES}
-          ${GPERFTOOLS_PROFILER_LIBRARIES}
-          ${EXTRA_DEPS})
+add_library(kvsWebrtcUtils STATIC ${WEBRTC_UTILS_SOURCE_FILES})
+
+target_link_libraries(kvsWebrtcUtils ${CMAKE_THREAD_LIBS_INIT})
+
+if(UNIX AND NOT APPLE)
+  # rt needed for clock_gettime
+  target_link_libraries(kvsWebrtcUtils rt)
+endif()
+
+if(BUILD_CLIENT)
+  add_library(kvsWebrtcClient ${LINKAGE} ${WEBRTC_CLIENT_SOURCE_FILES})
+
+  target_link_libraries(
+    kvsWebrtcClient
+    PRIVATE kvsWebrtcUtils
+            kvsWebrtcStateMachine
+            ${CMAKE_THREAD_LIBS_INIT}
+            ${OPENSSL_SSL_LIBRARY}
+            ${OPENSSL_CRYPTO_LIBRARY}
+            ${SRTP_LIBRARIES}
+            ${MBEDTLS_LIBRARIES}
+            ${EXTRA_DEPS})
+
+  if(ENABLE_STREAMING)
+    target_link_libraries(
+      kvsWebrtcClient
+      PRIVATE ${SRTP_LIBRARIES})
+  endif()
+
+  if(ENABLE_DATA_CHANNEL)
+    target_link_libraries(
+      kvsWebrtcClient
+      PRIVATE ${Usrsctp})
+  endif()
+endif()
+
+set(CPRODUCER_COMMON_TLS_OPTION KVS_USE_OPENSSL)
+if (USE_MBEDTLS)
+    set(CPRODUCER_COMMON_TLS_OPTION KVS_USE_MBEDTLS)
+endif()
 
 add_library(kvsWebrtcSignalingClient ${LINKAGE} ${WEBRTC_SIGNALING_CLIENT_SOURCE_FILES})
+target_compile_options(kvsWebrtcSignalingClient PUBLIC -Wno-format-truncation)
+target_compile_definitions(kvsWebrtcSignalingClient PRIVATE KVS_BUILD_WITH_LWS ${CPRODUCER_COMMON_TLS_OPTION})
 
 target_link_libraries(
   kvsWebrtcSignalingClient
-  PUBLIC
-        kvsCommonLws
-        ${LIBWEBSOCKETS_LIBRARIES} 
-  PRIVATE kvspicUtils
-         kvspicState
+  PRIVATE kvsWebrtcUtils
+         kvsWebrtcStateMachine
          ${CMAKE_THREAD_LIBS_INIT}
          ${EXTRA_DEPS}
          ${OPENSSL_SSL_LIBRARY}
          ${OPENSSL_CRYPTO_LIBRARY}
-         ${GPERFTOOLS_MALLOC_LIBRARIES}
-         ${GPERFTOOLS_PROFILER_LIBRARIES}
-         ${MBEDTLS_LIBRARIES})
+         ${MBEDTLS_LIBRARIES}
+         ${LLHTTP_LIBRARIES}
+         ${WSLAY_LIBRARIES})
 
 if (WIN32)
   target_link_libraries(kvsWebrtcClient PRIVATE "Ws2_32" "iphlpapi")
@@ -331,7 +389,14 @@ if(COMPILER_WARNINGS)
   target_compile_options(kvsWebrtcSignalingClient PUBLIC -Wall -Werror -pedantic -Wextra -Wno-unknown-warning-option)
 endif()
 
-install(TARGETS kvsWebrtcClient kvsWebrtcSignalingClient
+if(BUILD_CLIENT)
+install(TARGETS kvsWebrtcClient
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
+endif()
+
+install(TARGETS kvsWebrtcSignalingClient
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
 )
@@ -341,23 +406,44 @@ install(DIRECTORY ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/src/include/
 )
 
 if (BUILD_SAMPLE)
-  # copy sample frames to build folder, in case developer runs sample program with command `samples/kvsWebrtcClientMaster` from `build` dir.
   file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/samples/opusSampleFrames" DESTINATION .)
   file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/samples/h264SampleFrames" DESTINATION .)
 
-  add_subdirectory(samples)
+  add_executable(
+    kvsWebrtcClientMaster
+    ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/samples/Common.c
+    ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/samples/kvsWebRTCClientMaster.c)
+  target_link_libraries(kvsWebrtcClientMaster kvsWebrtcClient kvsWebrtcSignalingClient kvsWebrtcUtils)
+
+  add_executable(
+    kvsWebrtcClientViewer
+    ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/samples/Common.c
+    ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/samples/kvsWebRTCClientViewer.c)
+  target_link_libraries(kvsWebrtcClientViewer kvsWebrtcClient kvsWebrtcSignalingClient kvsWebrtcUtils)
+
+  add_executable(
+          discoverNatBehavior
+          ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/samples/discoverNatBehavior.c)
+  target_link_libraries(discoverNatBehavior kvsWebrtcClient)
+
+  if(GST_FOUND AND ENABLE_STREAMING)
+    add_executable(
+      kvsWebrtcClientMasterGstSample
+      ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/samples/Common.c
+      ${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/samples/kvsWebRTCClientMasterGstreamerSample.c
+    )
+    target_link_libraries(kvsWebrtcClientMasterGstSample kvsWebrtcClient kvsWebrtcSignalingClient ${GST_SAMPLE_LIBRARIES} kvsWebrtcUtils)
+
+    install(TARGETS kvsWebrtcClientMasterGstSample
+      RUNTIME DESTINATION bin
+    )
+  endif()
+
+  install(TARGETS kvsWebrtcClientMaster kvsWebrtcClientViewer discoverNatBehavior
+    RUNTIME DESTINATION bin
+  )
 endif()
 
 if(BUILD_TEST)
   add_subdirectory(tst)
 endif()
-
-if(BUILD_BENCHMARK)
-  add_subdirectory(bench)
-endif()
-
-get_directory_property(clean_files ADDITIONAL_CLEAN_FILES)
-list(APPEND clean_files "${OPEN_SRC_INSTALL_PREFIX}")
-list(APPEND clean_files "${CMAKE_CURRENT_SOURCE_DIR}/build")
-set_directory_properties(PROPERTIES ADDITIONAL_CLEAN_FILES "${clean_files}")
-

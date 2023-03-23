@@ -1,6 +1,17 @@
-/*******************************************
-Connection Listener internal include file
-*******************************************/
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
 #ifndef __KINESIS_VIDEO_WEBRTC_CONNECTION_LISTENER__
 #define __KINESIS_VIDEO_WEBRTC_CONNECTION_LISTENER__
 
@@ -9,7 +20,15 @@ Connection Listener internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
+#include "kvs/error.h"
+#include "SocketConnection.h"
 
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
 #define CONNECTION_LISTENER_SOCKET_WAIT_FOR_DATA_TIMEOUT     (200 * HUNDREDS_OF_NANOS_IN_A_MILLISECOND)
 #define CONNECTION_LISTENER_SHUTDOWN_TIMEOUT                 (1000 * HUNDREDS_OF_NANOS_IN_A_MILLISECOND)
 #define CONNECTION_LISTENER_DEFAULT_MAX_LISTENING_CONNECTION 64
@@ -24,6 +43,9 @@ typedef struct {
     UINT64 bufferLen;
 } ConnectionListener, *PConnectionListener;
 
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 /**
  * allocate the ConnectionListener struct
  *
@@ -80,11 +102,14 @@ STATUS connectionListenerRemoveAllConnection(PConnectionListener);
  * @return - STATUS status of execution
  */
 STATUS connectionListenerStart(PConnectionListener);
-
-////////////////////////////////////////////
-// internal functionalities
-////////////////////////////////////////////
-PVOID connectionListenerReceiveDataRoutine(PVOID arg);
+/**
+ * @brief
+ *
+ * @param[in] pConnectionListener the ConnectionListener struct to use
+ *
+ * @return STATUS status of execution
+ */
+PVOID connectionListenerReceiveDataRoutine(PVOID pArg);
 
 #ifdef __cplusplus
 }

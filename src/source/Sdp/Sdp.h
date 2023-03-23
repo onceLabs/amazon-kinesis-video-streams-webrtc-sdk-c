@@ -62,7 +62,6 @@ extern "C" {
 #define MAX_SDP_SESSION_PHONE_NUMBER_LENGTH  255
 
 #define MAX_SDP_TOKEN_LENGTH 128
-#define MAX_SDP_FMTP_VALUES  64
 
 #define MAX_SDP_SESSION_BANDWIDTH_COUNT        2
 #define MAX_SDP_SESSION_TIME_DESCRIPTION_COUNT 2
@@ -74,8 +73,7 @@ extern "C" {
  */
 #define MAX_SDP_SESSION_MEDIA_COUNT   5
 #define MAX_SDP_MEDIA_BANDWIDTH_COUNT 2
-
-#define MAX_SDP_ATTRIBUTES_COUNT 256
+#define MAX_SDP_ATTRIBUTES_COUNT      256
 
 /*
  * c=<nettype> <addrtype> <connection-address>
@@ -138,7 +136,9 @@ typedef struct {
 
 typedef struct {
     // m=<media> <port>/<number of ports> <proto> <fmt> ...
+    // m=video 49170/2 RTP/AVP 31
     // https://tools.ietf.org/html/rfc4566#section-5.14
+    // video 9 UDP/TLS/RTP/SAVPF 96 97 98 99 100 101 102 121 127 120 125 107 108 109 124 119 123 118 114 115 116\r\n
     CHAR mediaName[MAX_SDP_MEDIA_NAME_LENGTH + 1];
 
     // i=<session description>
@@ -161,11 +161,15 @@ typedef struct {
 typedef struct {
     // https://tools.ietf.org/html/rfc4566#section-5.1
     UINT64 version;
-
+    /**
+     * https://tools.ietf.org/html/rfc4566#section-5.2
+     * Origin ==> o=<username> <sess-id> <sess-version> <nettype> <addrtype> <unicast-address>
+     */
     SdpOrigin sdpOrigin;
-
-    // s=<session name>
-    // https://tools.ietf.org/html/rfc4566#section-5.3
+    /**
+     * https://tools.ietf.org/html/rfc4566#section-5.3
+     * Session Name ==> s=<session name>
+     */
     CHAR sessionName[MAX_SDP_SESSION_NAME_LENGTH + 1];
 
     // i=<session description>
@@ -193,14 +197,14 @@ typedef struct {
     SdpTimeZone sdpTimeZone[MAX_SDP_SESSION_TIMEZONE_COUNT];
 
     SdpEncryptionKey sdpEncryptionKey;
-
+    // a=
     SdpAttributes sdpAttributes[MAX_SDP_ATTRIBUTES_COUNT];
-
+    // m=
     SdpMediaDescription mediaDescriptions[MAX_SDP_SESSION_MEDIA_COUNT];
 
-    UINT16 sessionAttributesCount;
+    UINT8 sessionAttributesCount;
 
-    UINT16 mediaCount;
+    UINT8 mediaCount; //!< the number of media name.
 
     UINT8 timezoneCount;
 

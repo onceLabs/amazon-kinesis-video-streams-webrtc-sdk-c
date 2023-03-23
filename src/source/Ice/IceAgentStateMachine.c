@@ -1,41 +1,39 @@
-/**
- * Implementation of a ice agent states machine callbacks
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
  */
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
 #define LOG_CLASS "IceAgentState"
 #include "../Include_i.h"
+#include "TurnConnection.h"
+#include "IceAgentStateMachine.h"
 
-/**
- * Static definitions of the states
- */
-StateMachineState ICE_AGENT_STATE_MACHINE_STATES[] = {
-    {ICE_AGENT_STATE_NEW, ICE_AGENT_STATE_NONE | ICE_AGENT_STATE_NEW, fromNewIceAgentState, executeNewIceAgentState, NULL,
-     INFINITE_RETRY_COUNT_SENTINEL, STATUS_ICE_INVALID_STATE},
-    {ICE_AGENT_STATE_CHECK_CONNECTION, ICE_AGENT_STATE_NEW | ICE_AGENT_STATE_CHECK_CONNECTION, fromCheckConnectionIceAgentState,
-     executeCheckConnectionIceAgentState, NULL, INFINITE_RETRY_COUNT_SENTINEL, STATUS_ICE_INVALID_STATE},
-    {ICE_AGENT_STATE_CONNECTED, ICE_AGENT_STATE_CHECK_CONNECTION | ICE_AGENT_STATE_CONNECTED, fromConnectedIceAgentState,
-     executeConnectedIceAgentState, NULL, INFINITE_RETRY_COUNT_SENTINEL, STATUS_ICE_INVALID_STATE},
-    {ICE_AGENT_STATE_NOMINATING, ICE_AGENT_STATE_CONNECTED | ICE_AGENT_STATE_NOMINATING, fromNominatingIceAgentState, executeNominatingIceAgentState,
-     NULL, INFINITE_RETRY_COUNT_SENTINEL, STATUS_ICE_INVALID_STATE},
-    {ICE_AGENT_STATE_READY, ICE_AGENT_STATE_CONNECTED | ICE_AGENT_STATE_NOMINATING | ICE_AGENT_STATE_READY | ICE_AGENT_STATE_DISCONNECTED,
-     fromReadyIceAgentState, executeReadyIceAgentState, NULL, INFINITE_RETRY_COUNT_SENTINEL, STATUS_ICE_INVALID_STATE},
-    {ICE_AGENT_STATE_DISCONNECTED,
-     ICE_AGENT_STATE_CHECK_CONNECTION | ICE_AGENT_STATE_CONNECTED | ICE_AGENT_STATE_NOMINATING | ICE_AGENT_STATE_READY | ICE_AGENT_STATE_DISCONNECTED,
-     fromDisconnectedIceAgentState, executeDisconnectedIceAgentState, NULL, INFINITE_RETRY_COUNT_SENTINEL, STATUS_ICE_INVALID_STATE},
-    {ICE_AGENT_STATE_FAILED,
-     ICE_AGENT_STATE_CHECK_CONNECTION | ICE_AGENT_STATE_CONNECTED | ICE_AGENT_STATE_NOMINATING | ICE_AGENT_STATE_READY |
-         ICE_AGENT_STATE_DISCONNECTED | ICE_AGENT_STATE_FAILED,
-     fromFailedIceAgentState, executeFailedIceAgentState, NULL, INFINITE_RETRY_COUNT_SENTINEL, STATUS_ICE_INVALID_STATE},
-};
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
 
-UINT32 ICE_AGENT_STATE_MACHINE_STATE_COUNT = ARRAY_SIZE(ICE_AGENT_STATE_MACHINE_STATES);
-
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 STATUS stepIceAgentStateMachine(PIceAgent pIceAgent)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     UINT64 oldState;
 
-    CHK(pIceAgent != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     oldState = pIceAgent->iceAgentState;
 
@@ -71,7 +69,7 @@ STATUS acceptIceAgentMachineState(PIceAgent pIceAgent, UINT64 state)
     STATUS retStatus = STATUS_SUCCESS;
     BOOL locked = FALSE;
 
-    CHK(pIceAgent != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     MUTEX_LOCK(pIceAgent->lock);
     locked = TRUE;
@@ -98,23 +96,28 @@ STATUS iceAgentStateMachineCheckDisconnection(PIceAgent pIceAgent, PUINT64 pNext
     STATUS retStatus = STATUS_SUCCESS;
     UINT64 currentTime;
 
-    CHK(pIceAgent != NULL && pNextState != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL && pNextState != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     currentTime = GETTIME();
+    // check the timeout of connection.
     if (!pIceAgent->detectedDisconnection && IS_VALID_TIMESTAMP(pIceAgent->lastDataReceivedTime) &&
         pIceAgent->lastDataReceivedTime + KVS_ICE_ENTER_STATE_DISCONNECTION_GRACE_PERIOD <= currentTime) {
+        DLOGW("detect disconnection.");
         *pNextState = ICE_AGENT_STATE_DISCONNECTED;
+
+        // back to ready from disconnected.
     } else if (pIceAgent->detectedDisconnection) {
         if (IS_VALID_TIMESTAMP(pIceAgent->lastDataReceivedTime) &&
             pIceAgent->lastDataReceivedTime + KVS_ICE_ENTER_STATE_DISCONNECTION_GRACE_PERIOD > currentTime) {
             // recovered from disconnection
             DLOGD("recovered from disconnection");
             pIceAgent->detectedDisconnection = FALSE;
+            // #TBD, need to check the function of stateChange.
             if (pIceAgent->iceAgentCallbacks.connectionStateChangedFn != NULL) {
                 pIceAgent->iceAgentCallbacks.connectionStateChangedFn(pIceAgent->iceAgentCallbacks.customData, pIceAgent->iceAgentState);
             }
         } else if (currentTime >= pIceAgent->disconnectionGracePeriodEndTime) {
-            CHK(FALSE, STATUS_ICE_FAILED_TO_RECOVER_FROM_DISCONNECTION);
+            CHK(FALSE, STATUS_ICE_FSM_FAILED_TO_RECOVER_FROM_DISCONNECTION);
         }
     }
 
@@ -167,7 +170,7 @@ STATUS fromNewIceAgentState(UINT64 customData, PUINT64 pState)
     PIceAgent pIceAgent = (PIceAgent) customData;
     UINT64 state;
 
-    CHK(pIceAgent != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL && pState != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     // go directly to next state
     state = ICE_AGENT_STATE_CHECK_CONNECTION;
@@ -187,7 +190,7 @@ STATUS executeNewIceAgentState(UINT64 customData, UINT64 time)
     STATUS retStatus = STATUS_SUCCESS;
     PIceAgent pIceAgent = (PIceAgent) customData;
 
-    CHK(pIceAgent != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL, STATUS_ICE_FSM_NULL_ARG);
     // return early if we are already in ICE_AGENT_STATE_GATHERING
     CHK(pIceAgent->iceAgentState != ICE_AGENT_STATE_NEW, retStatus);
 
@@ -211,7 +214,7 @@ STATUS fromCheckConnectionIceAgentState(UINT64 customData, PUINT64 pState)
     PIceCandidatePair pIceCandidatePair = NULL;
     BOOL locked = FALSE;
 
-    CHK(pIceAgent != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL && pState != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     MUTEX_LOCK(pIceAgent->lock);
     locked = TRUE;
@@ -219,14 +222,11 @@ STATUS fromCheckConnectionIceAgentState(UINT64 customData, PUINT64 pState)
     // move to failed state if any error happened.
     CHK_STATUS(pIceAgent->iceAgentStatus);
 
-    // return early if changing to disconnected state
-    CHK(state != ICE_AGENT_STATE_DISCONNECTED, retStatus);
-
     // connected pair found ? go to ICE_AGENT_STATE_CONNECTED : timeout ? go to error : remain in ICE_AGENT_STATE_CHECK_CONNECTION
-    CHK_STATUS(doubleListGetHeadNode(pIceAgent->iceCandidatePairs, &pCurNode));
+    // pop the first succeeded candidate pair, and switch to connected state.
+    CHK_STATUS(doubleListGetHeadNode(pIceAgent->pIceCandidatePairs, &pCurNode));
     while (pCurNode != NULL && !connectedCandidatePairFound) {
         pIceCandidatePair = (PIceCandidatePair) pCurNode->data;
-        DLOGD("Checking pair: %s %s, state: %d", pIceCandidatePair->local->id, pIceCandidatePair->remote->id, pIceCandidatePair->state);
         pCurNode = pCurNode->pNext;
 
         if (pIceCandidatePair->state == ICE_CANDIDATE_PAIR_STATE_SUCCEEDED) {
@@ -237,11 +237,12 @@ STATUS fromCheckConnectionIceAgentState(UINT64 customData, PUINT64 pState)
 
     // return error if no connected pair found within timeout
     if (!connectedCandidatePairFound && currentTime >= pIceAgent->stateEndTime) {
-        retStatus = STATUS_ICE_NO_CONNECTED_CANDIDATE_PAIR;
+        retStatus = STATUS_ICE_FSM_NO_CONNECTED_CANDIDATE_PAIR;
+        DLOGW("check connection timeout.");
     }
 
 CleanUp:
-
+    // #TBD,
     if (STATUS_FAILED(retStatus)) {
         state = ICE_AGENT_STATE_FAILED;
         pIceAgent->iceAgentStatus = retStatus;
@@ -268,8 +269,9 @@ STATUS executeCheckConnectionIceAgentState(UINT64 customData, UINT64 time)
     STATUS retStatus = STATUS_SUCCESS;
     PIceAgent pIceAgent = (PIceAgent) customData;
 
-    CHK(pIceAgent != NULL, STATUS_NULL_ARG);
-
+    CHK(pIceAgent != NULL, STATUS_ICE_FSM_NULL_ARG);
+    // #TBD, why this happen. basically leaving from new will set the state as check-connection.
+    //
     if (pIceAgent->iceAgentState != ICE_AGENT_STATE_CHECK_CONNECTION) {
         CHK_STATUS(iceAgentCheckConnectionStateSetup(pIceAgent));
         pIceAgent->iceAgentState = ICE_AGENT_STATE_CHECK_CONNECTION;
@@ -295,22 +297,16 @@ STATUS fromConnectedIceAgentState(UINT64 customData, PUINT64 pState)
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PIceAgent pIceAgent = (PIceAgent) customData;
-    UINT64 state = ICE_AGENT_STATE_CONNECTED; // original state
+    UINT64 state = ICE_AGENT_STATE_NOMINATING; // original state
     BOOL locked = FALSE;
 
-    CHK(pIceAgent != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL && pState != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     MUTEX_LOCK(pIceAgent->lock);
     locked = TRUE;
 
     // move to failed state if any error happened.
     CHK_STATUS(pIceAgent->iceAgentStatus);
-
-    // return early if changing to disconnected state
-    CHK(state != ICE_AGENT_STATE_DISCONNECTED, retStatus);
-
-    // Go directly to nominating state from connected state.
-    state = ICE_AGENT_STATE_NOMINATING;
 
 CleanUp:
 
@@ -340,7 +336,7 @@ STATUS executeConnectedIceAgentState(UINT64 customData, UINT64 time)
     STATUS retStatus = STATUS_SUCCESS;
     PIceAgent pIceAgent = (PIceAgent) customData;
 
-    CHK(pIceAgent != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     CHK_STATUS(iceAgentConnectedStateSetup(pIceAgent));
 
@@ -370,7 +366,7 @@ STATUS fromNominatingIceAgentState(UINT64 customData, PUINT64 pState)
     PDoubleListNode pCurNode = NULL;
     PIceCandidatePair pIceCandidatePair = NULL;
 
-    CHK(pIceAgent != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL && pState != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     MUTEX_LOCK(pIceAgent->lock);
     locked = TRUE;
@@ -378,12 +374,10 @@ STATUS fromNominatingIceAgentState(UINT64 customData, PUINT64 pState)
     // move to failed state if any error happened.
     CHK_STATUS(pIceAgent->iceAgentStatus);
 
-    // return early if changing to disconnected state
-    CHK(state != ICE_AGENT_STATE_DISCONNECTED, retStatus);
 
     // has a nominated and connected pair ? go to ICE_AGENT_STATE_READY : timeout ? go to failed state : remain in ICE_AGENT_STATE_NOMINATING
 
-    CHK_STATUS(doubleListGetHeadNode(pIceAgent->iceCandidatePairs, &pCurNode));
+    CHK_STATUS(doubleListGetHeadNode(pIceAgent->pIceCandidatePairs, &pCurNode));
     while (pCurNode != NULL) {
         pIceCandidatePair = (PIceCandidatePair) pCurNode->data;
         pCurNode = pCurNode->pNext;
@@ -397,6 +391,7 @@ STATUS fromNominatingIceAgentState(UINT64 customData, PUINT64 pState)
     if (nominatedAndValidCandidatePairFound) {
         state = ICE_AGENT_STATE_READY;
     } else if (currentTime >= pIceAgent->stateEndTime) {
+        DLOGW("nominating timeout.");
         CHK(FALSE, STATUS_ICE_FAILED_TO_NOMINATE_CANDIDATE_PAIR);
     }
 
@@ -428,14 +423,15 @@ STATUS executeNominatingIceAgentState(UINT64 customData, UINT64 time)
     STATUS retStatus = STATUS_SUCCESS;
     PIceAgent pIceAgent = (PIceAgent) customData;
 
-    CHK(pIceAgent != NULL, STATUS_NULL_ARG);
-
+    CHK(pIceAgent != NULL, STATUS_ICE_FSM_NULL_ARG);
+    // prepare the stun use-candidate packet if we are controlling ice agent.
     if (pIceAgent->iceAgentState != ICE_AGENT_STATE_NOMINATING) {
         CHK_STATUS(iceAgentNominatingStateSetup(pIceAgent));
         pIceAgent->iceAgentState = ICE_AGENT_STATE_NOMINATING;
     }
 
     if (pIceAgent->isControlling) {
+        // send the stun use-candidate packet.
         CHK_STATUS(iceAgentSendCandidateNomination(pIceAgent));
     } else {
         // if not controlling, keep sending connection checks and wait for peer
@@ -466,7 +462,7 @@ STATUS fromReadyIceAgentState(UINT64 customData, PUINT64 pState)
     PDoubleListNode pCurNode = NULL, pNodeToDelete = NULL;
     PIceCandidate pIceCandidate = NULL;
 
-    CHK(pIceAgent != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL && pState != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     MUTEX_LOCK(pIceAgent->lock);
     locked = TRUE;
@@ -523,7 +519,7 @@ STATUS executeReadyIceAgentState(UINT64 customData, UINT64 time)
     STATUS retStatus = STATUS_SUCCESS;
     PIceAgent pIceAgent = (PIceAgent) customData;
 
-    CHK(pIceAgent != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     if (pIceAgent->iceAgentState != ICE_AGENT_STATE_READY) {
         CHK_STATUS(iceAgentReadyStateSetup(pIceAgent));
@@ -551,7 +547,7 @@ STATUS fromDisconnectedIceAgentState(UINT64 customData, PUINT64 pState)
     UINT64 state = pIceAgent->iceAgentState; // state before ICE_AGENT_STATE_DISCONNECTED
     BOOL locked = FALSE;
 
-    CHK(pIceAgent != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL && pState != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     MUTEX_LOCK(pIceAgent->lock);
     locked = TRUE;
@@ -587,7 +583,7 @@ STATUS executeDisconnectedIceAgentState(UINT64 customData, UINT64 time)
     STATUS retStatus = STATUS_SUCCESS;
     PIceAgent pIceAgent = (PIceAgent) customData;
 
-    CHK(pIceAgent != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL, STATUS_ICE_FSM_NULL_ARG);
     CHK(pIceAgent->iceAgentState != ICE_AGENT_STATE_DISCONNECTED, retStatus);
 
     // not stopping timer task from previous state as we want it to continue and perhaps recover.
@@ -600,6 +596,7 @@ STATUS executeDisconnectedIceAgentState(UINT64 customData, UINT64 time)
     // then go to failed state.
     pIceAgent->disconnectionGracePeriodEndTime = GETTIME() + KVS_ICE_ENTER_STATE_FAILED_GRACE_PERIOD;
 
+    // #TBD, need to check the function of stateChange.
     if (pIceAgent->iceAgentCallbacks.connectionStateChangedFn != NULL) {
         pIceAgent->iceAgentCallbacks.connectionStateChangedFn(pIceAgent->iceAgentCallbacks.customData, ICE_AGENT_STATE_DISCONNECTED);
     }
@@ -626,7 +623,7 @@ STATUS fromFailedIceAgentState(UINT64 customData, PUINT64 pState)
     STATUS retStatus = STATUS_SUCCESS;
     PIceAgent pIceAgent = (PIceAgent) customData;
 
-    CHK(pIceAgent != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL && pState != NULL, STATUS_ICE_FSM_NULL_ARG);
 
     // FAILED state is terminal.
     *pState = ICE_AGENT_STATE_FAILED;
@@ -645,14 +642,14 @@ STATUS executeFailedIceAgentState(UINT64 customData, UINT64 time)
     PIceAgent pIceAgent = (PIceAgent) customData;
     const PCHAR errMsgPrefix = (PCHAR) "IceAgent fatal error:";
 
-    CHK(pIceAgent != NULL, STATUS_NULL_ARG);
+    CHK(pIceAgent != NULL, STATUS_ICE_FSM_NULL_ARG);
     CHK(pIceAgent->iceAgentState != ICE_AGENT_STATE_FAILED, retStatus);
 
     pIceAgent->iceAgentState = ICE_AGENT_STATE_FAILED;
 
     // log some debug info about the failure once.
     switch (pIceAgent->iceAgentStatus) {
-        case STATUS_ICE_NO_AVAILABLE_ICE_CANDIDATE_PAIR:
+        case STATUS_ICE_FSM_NO_AVAILABLE_ICE_CANDIDATE_PAIR:
             DLOGE("%s No ice candidate pairs available to make connection.", errMsgPrefix);
             break;
         default:
@@ -665,3 +662,37 @@ CleanUp:
     LEAVES();
     return retStatus;
 }
+
+/**
+ * Static definitions of the states
+ */
+#define ICE_AGENT_STATE_UNLIMIT_RETRY       (INFINITE_RETRY_COUNT_SENTINEL)
+#define ICE_AGENT_STATE_NEW_REQUIRED        (ICE_AGENT_STATE_NONE | ICE_AGENT_STATE_NEW)
+#define ICE_AGENT_STATE_CHECK_CONN_REQUIRED (ICE_AGENT_STATE_NEW | ICE_AGENT_STATE_CHECK_CONNECTION)
+#define ICE_AGENT_STATE_CONNECTED_REQUIRED  (ICE_AGENT_STATE_CHECK_CONNECTION | ICE_AGENT_STATE_CONNECTED)
+#define ICE_AGENT_STATE_NOMINATING_REQUIRED (ICE_AGENT_STATE_CONNECTED | ICE_AGENT_STATE_NOMINATING)
+#define ICE_AGENT_STATE_READY_REQUIRED      (ICE_AGENT_STATE_CONNECTED | ICE_AGENT_STATE_NOMINATING | ICE_AGENT_STATE_READY | ICE_AGENT_STATE_DISCONNECTED)
+#define ICE_AGENT_STATE_DISCONNECTED_REQUIRED                                                                                                        \
+    (ICE_AGENT_STATE_CHECK_CONNECTION | ICE_AGENT_STATE_CONNECTED | ICE_AGENT_STATE_NOMINATING | ICE_AGENT_STATE_READY | ICE_AGENT_STATE_DISCONNECTED)
+#define ICE_AGENT_STATE_FAILED_REQUIRED                                                                                                              \
+    (ICE_AGENT_STATE_CHECK_CONNECTION | ICE_AGENT_STATE_CONNECTED | ICE_AGENT_STATE_NOMINATING | ICE_AGENT_STATE_READY |                             \
+     ICE_AGENT_STATE_DISCONNECTED | ICE_AGENT_STATE_FAILED)
+
+StateMachineState ICE_AGENT_STATE_MACHINE_STATES[] = {
+    {ICE_AGENT_STATE_NEW, ICE_AGENT_STATE_NEW_REQUIRED, fromNewIceAgentState, executeNewIceAgentState, ICE_AGENT_STATE_UNLIMIT_RETRY,
+     STATUS_ICE_FSM_INVALID_STATE},
+    {ICE_AGENT_STATE_CHECK_CONNECTION, ICE_AGENT_STATE_CHECK_CONN_REQUIRED, fromCheckConnectionIceAgentState, executeCheckConnectionIceAgentState,
+     ICE_AGENT_STATE_UNLIMIT_RETRY, STATUS_ICE_FSM_INVALID_STATE},
+    {ICE_AGENT_STATE_CONNECTED, ICE_AGENT_STATE_CONNECTED_REQUIRED, fromConnectedIceAgentState, executeConnectedIceAgentState,
+     ICE_AGENT_STATE_UNLIMIT_RETRY, STATUS_ICE_FSM_INVALID_STATE},
+    {ICE_AGENT_STATE_NOMINATING, ICE_AGENT_STATE_NOMINATING_REQUIRED, fromNominatingIceAgentState, executeNominatingIceAgentState,
+     ICE_AGENT_STATE_UNLIMIT_RETRY, STATUS_ICE_FSM_INVALID_STATE},
+    {ICE_AGENT_STATE_READY, ICE_AGENT_STATE_READY_REQUIRED, fromReadyIceAgentState, executeReadyIceAgentState, ICE_AGENT_STATE_UNLIMIT_RETRY,
+     STATUS_ICE_FSM_INVALID_STATE},
+    {ICE_AGENT_STATE_DISCONNECTED, ICE_AGENT_STATE_DISCONNECTED_REQUIRED, fromDisconnectedIceAgentState, executeDisconnectedIceAgentState,
+     ICE_AGENT_STATE_UNLIMIT_RETRY, STATUS_ICE_FSM_INVALID_STATE},
+    {ICE_AGENT_STATE_FAILED, ICE_AGENT_STATE_FAILED_REQUIRED, fromFailedIceAgentState, executeFailedIceAgentState, ICE_AGENT_STATE_UNLIMIT_RETRY,
+     STATUS_ICE_FSM_INVALID_STATE},
+};
+
+UINT32 ICE_AGENT_STATE_MACHINE_STATE_COUNT = ARRAY_SIZE(ICE_AGENT_STATE_MACHINE_STATES);

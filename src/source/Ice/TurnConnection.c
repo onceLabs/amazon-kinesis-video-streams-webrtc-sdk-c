@@ -1,8 +1,49 @@
-/**
- * Kinesis Video TurnConnection
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
  */
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
 #define LOG_CLASS "TurnConnection"
 #include "../Include_i.h"
+#include "Endianness.h"
+#include "IceAgent.h"
+#include "TurnConnection.h"
+
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
+static STATUS turnConnectionFreePreAllocatedPackets(PTurnConnection pTurnConnection);
+static STATUS turnConnectionHandleStunError(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen);
+static STATUS turnConnectionHandleStun(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen);
+static STATUS turnConnectionHandleChannelData(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen, PTurnChannelData pChannelData,
+        PUINT32 pChannelDataCount, PUINT32 pProcessedDataLen);
+static STATUS turnConnectionUpdateNonce(PTurnConnection pTurnConnection);
+static PTurnPeer turnConnectionGetPeerWithChannelNumber(PTurnConnection pTurnConnection, UINT16 channelNumber);
+static STATUS turnConnectionHandleChannelDataTcpMode(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen, PTurnChannelData pChannelData,
+        PUINT32 pTurnChannelDataCount, PUINT32 pProcessedDataLen);
+static PTurnPeer turnConnectionGetPeerWithIp(PTurnConnection pTurnConnection, PKvsIpAddress pKvsIpAddress);
+static STATUS turnConnectionTimerCallback(UINT32 timerId, UINT64 currentTime, UINT64 customData);
+static STATUS turnConnectionGetLongTermKey(PCHAR username, PCHAR realm, PCHAR password, PBYTE pBuffer, UINT32 bufferLen);
+static PCHAR turnConnectionGetStateStr(TURN_CONNECTION_STATE state);
+static VOID turnConnectionFatalError(PTurnConnection pTurnConnection, STATUS errorStatus);
+static STATUS turnConnectionPackageTurnAllocationRequest(PCHAR username, PCHAR realm, PBYTE nonce, UINT16 nonceLen, UINT32 lifetime,
+        PStunPacket* ppStunPacket);
+
 
 STATUS createTurnConnection(PIceServer pTurnServer, TIMER_QUEUE_HANDLE timerQueueHandle, TURN_CONNECTION_DATA_TRANSFER_MODE dataTransferMode,
                             KVS_SOCKET_PROTOCOL protocol, PTurnConnectionCallbacks pTurnConnectionCallbacks, PSocketConnection pTurnSocket,
@@ -13,12 +54,13 @@ STATUS createTurnConnection(PIceServer pTurnServer, TIMER_QUEUE_HANDLE timerQueu
     STATUS retStatus = STATUS_SUCCESS;
     PTurnConnection pTurnConnection = NULL;
 
-    CHK(pTurnServer != NULL && ppTurnConnection != NULL && pTurnSocket != NULL, STATUS_NULL_ARG);
-    CHK(IS_VALID_TIMER_QUEUE_HANDLE(timerQueueHandle), STATUS_INVALID_ARG);
+    CHK(pTurnServer != NULL && ppTurnConnection != NULL && pTurnSocket != NULL, STATUS_TURN_NULL_ARG);
+    CHK(IS_VALID_TIMER_QUEUE_HANDLE(timerQueueHandle), STATUS_TURN_INVALID_TIMER_ARG);
     CHK(pTurnServer->isTurn && !IS_EMPTY_STRING(pTurnServer->url) && !IS_EMPTY_STRING(pTurnServer->credential) &&
             !IS_EMPTY_STRING(pTurnServer->username),
-        STATUS_INVALID_ARG);
+        STATUS_TURN_INVALID_SERVER_ARG);
 
+    // #TBD, #heap, #memory.
     pTurnConnection = (PTurnConnection) MEMCALLOC(
         1, SIZEOF(TurnConnection) + DEFAULT_TURN_MESSAGE_RECV_CHANNEL_DATA_BUFFER_LEN * 2 + DEFAULT_TURN_MESSAGE_SEND_CHANNEL_DATA_BUFFER_LEN);
     CHK(pTurnConnection != NULL, STATUS_NOT_ENOUGH_MEMORY);
@@ -84,7 +126,7 @@ STATUS freeTurnConnection(PTurnConnection* ppTurnConnection)
     SIZE_T timerCallbackId;
     UINT32 i;
 
-    CHK(ppTurnConnection != NULL, STATUS_NULL_ARG);
+    CHK(ppTurnConnection != NULL, STATUS_TURN_NULL_ARG);
     // free is idempotent
     CHK(*ppTurnConnection != NULL, retStatus);
 
@@ -112,6 +154,7 @@ STATUS freeTurnConnection(PTurnConnection* ppTurnConnection)
         MUTEX_LOCK(pTurnConnection->lock);
         MUTEX_UNLOCK(pTurnConnection->lock);
         MUTEX_FREE(pTurnConnection->lock);
+        pTurnConnection->lock = INVALID_MUTEX_VALUE;
     }
 
     if (IS_VALID_MUTEX_VALUE(pTurnConnection->sendLock)) {
@@ -119,6 +162,7 @@ STATUS freeTurnConnection(PTurnConnection* ppTurnConnection)
         MUTEX_LOCK(pTurnConnection->sendLock);
         MUTEX_UNLOCK(pTurnConnection->sendLock);
         MUTEX_FREE(pTurnConnection->sendLock);
+        pTurnConnection->sendLock = INVALID_MUTEX_VALUE;
     }
 
     if (IS_VALID_CVAR_VALUE(pTurnConnection->freeAllocationCvar)) {
@@ -149,7 +193,7 @@ STATUS turnConnectionIncomingDataHandler(PTurnConnection pTurnConnection, PBYTE 
     UINT32 remainingDataSize = 0, processedDataLen, channelDataCount = 0, totalChannelDataCount = 0, channelDataListSize;
     PBYTE pCurrent = NULL;
 
-    CHK(pTurnConnection != NULL && channelDataList != NULL && pChannelDataCount != NULL, STATUS_NULL_ARG);
+    CHK(pTurnConnection != NULL && channelDataList != NULL && pChannelDataCount != NULL, STATUS_TURN_NULL_ARG);
     CHK_WARN(bufferLen > 0 && pBuffer != NULL, retStatus, "Got empty buffer");
 
     /* initially pChannelDataCount contains size of channelDataList */
@@ -159,11 +203,14 @@ STATUS turnConnectionIncomingDataHandler(PTurnConnection pTurnConnection, PBYTE 
     while (remainingDataSize > 0 && totalChannelDataCount < channelDataListSize) {
         processedDataLen = 0;
         channelDataCount = 0;
+        // stun packets.
         if (IS_STUN_PACKET(pCurrent)) {
             processedDataLen = GET_STUN_PACKET_SIZE(pCurrent) + STUN_HEADER_LEN; /* size of entire STUN packet */
+            // error packets.
             if (STUN_PACKET_IS_TYPE_ERROR(pCurrent)) {
                 CHK_STATUS(turnConnectionHandleStunError(pTurnConnection, pCurrent, processedDataLen));
             } else {
+                // normal packets.
                 CHK_STATUS(turnConnectionHandleStun(pTurnConnection, pCurrent, processedDataLen));
             }
         } else {
@@ -189,7 +236,16 @@ CleanUp:
     return retStatus;
 }
 
-STATUS turnConnectionHandleStun(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen)
+/**
+ * @brief handle the stun inbound packet from the turn connection.
+ *
+ * @param[in] pTurnConnection the context of the turn connection.
+ * @param[in] pBuffer the buffer of the packet.
+ * @param[in] bufferLen the length of the buffer.
+ *
+ * @return STATUS status of execution.
+ */
+static STATUS turnConnectionHandleStun(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -205,8 +261,8 @@ STATUS turnConnectionHandleStun(PTurnConnection pTurnConnection, PBYTE pBuffer, 
     UINT64 currentTime;
     UINT32 i;
 
-    CHK(pTurnConnection != NULL, STATUS_NULL_ARG);
-    CHK(pBuffer != NULL && bufferLen > 0, STATUS_INVALID_ARG);
+    CHK(pTurnConnection != NULL, STATUS_TURN_NULL_ARG);
+    CHK(pBuffer != NULL && bufferLen > 0, STATUS_TURN_INVALID_INBOUND_STUN_BUF);
     CHK(IS_STUN_PACKET(pBuffer) && !STUN_PACKET_IS_TYPE_ERROR(pBuffer), retStatus);
 
     MUTEX_LOCK(pTurnConnection->lock);
@@ -220,9 +276,12 @@ STATUS turnConnectionHandleStun(PTurnConnection pTurnConnection, PBYTE pBuffer, 
         case STUN_PACKET_TYPE_ALLOCATE_SUCCESS_RESPONSE:
             /* If shutdown has been initiated, ignore the allocation response */
             CHK(!ATOMIC_LOAD(&pTurnConnection->stopTurnConnection), retStatus);
+            // de-serialize the stun packet.
             CHK_STATUS(deserializeStunPacket(pBuffer, bufferLen, pTurnConnection->longTermKey, KVS_MD5_DIGEST_LENGTH, &pStunPacket));
+            // get the xor relay address.
             CHK_STATUS(getStunAttribute(pStunPacket, STUN_ATTRIBUTE_TYPE_XOR_RELAYED_ADDRESS, &pStunAttr));
             CHK_WARN(pStunAttr != NULL, retStatus, "No relay address attribute found in TURN allocate response. Dropping Packet");
+            // get the lifetime.
             CHK_STATUS(getStunAttribute(pStunPacket, STUN_ATTRIBUTE_TYPE_LIFETIME, (PStunAttributeHeader*) &pStunAttributeLifetime));
             CHK_WARN(pStunAttributeLifetime != NULL, retStatus, "Missing lifetime in Allocation response. Dropping Packet");
 
@@ -234,7 +293,7 @@ STATUS turnConnectionHandleStun(PTurnConnection pTurnConnection, PBYTE pBuffer, 
             pStunAttributeAddress = (PStunAttributeAddress) pStunAttr;
             pTurnConnection->relayAddress = pStunAttributeAddress->address;
             ATOMIC_STORE_BOOL(&pTurnConnection->hasAllocation, TRUE);
-
+            // the callback for notifying the user of the information of xor relay address.
             if (!pTurnConnection->relayAddressReported && pTurnConnection->turnConnectionCallbacks.relayAddressAvailableFn != NULL) {
                 pTurnConnection->relayAddressReported = TRUE;
 
@@ -330,8 +389,16 @@ CleanUp:
     LEAVES();
     return retStatus;
 }
-
-STATUS turnConnectionHandleStunError(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen)
+/**
+ * @brief hanlde the stun error response.
+ *
+ * @param[in] pTurnConnection the context of the turn connection.
+ * @param[in] pBuffer the buffer of the stun packet.
+ * @param[in] bufferLen the length of the stun packet.
+ *
+ * @return STATUS status of execution.
+ */
+static STATUS turnConnectionHandleStunError(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -345,14 +412,14 @@ STATUS turnConnectionHandleStunError(PTurnConnection pTurnConnection, PBYTE pBuf
     PTurnPeer pTurnPeer = NULL;
     UINT32 i;
 
-    CHK(pTurnConnection != NULL, STATUS_NULL_ARG);
-    CHK(pBuffer != NULL && bufferLen > 0, STATUS_INVALID_ARG);
+    CHK(pTurnConnection != NULL, STATUS_TURN_NULL_ARG);
+    CHK(pBuffer != NULL && bufferLen > 0, STATUS_TURN_INVALID_INBOUND_STUN_ERROR_BUF);
     CHK(STUN_PACKET_IS_TYPE_ERROR(pBuffer), retStatus);
+    DLOGD("stun error packet type:0x%x", STUN_PACKET_GET_TYPE(pBuffer));
 
     MUTEX_LOCK(pTurnConnection->lock);
     locked = TRUE;
 
-    stunPacketType = (UINT16) getInt16(*((PUINT16) pBuffer));
     /* we could get errors like expired nonce after sending the deallocation packet. The allocate would have been
      * deallocated even if the response is error response, and if we try to deallocate again we would get invalid
      * allocation error. Therefore if we get an error after we've sent the deallocation packet, consider the
@@ -383,19 +450,21 @@ STATUS turnConnectionHandleStunError(PTurnConnection pTurnConnection, PBYTE pBuf
             CHK_WARN(pStunAttributeNonce->attribute.length <= STUN_MAX_NONCE_LEN, retStatus,
                      "Invalid Nonce found in Allocate Error response. Dropping Packet");
             pTurnConnection->nonceLen = pStunAttributeNonce->attribute.length;
+            // copy the nonce.
             MEMCPY(pTurnConnection->turnNonce, pStunAttributeNonce->nonce, pTurnConnection->nonceLen);
-
+            // get the realm.
             CHK_STATUS(getStunAttribute(pStunPacket, STUN_ATTRIBUTE_TYPE_REALM, &pStunAttr));
             CHK_WARN(pStunAttr != NULL, retStatus, "No Realm attribute found in Allocate Error response. Dropping Packet");
             pStunAttributeRealm = (PStunAttributeRealm) pStunAttr;
             CHK_WARN(pStunAttributeRealm->attribute.length <= STUN_MAX_REALM_LEN, retStatus,
                      "Invalid Realm found in Allocate Error response. Dropping Packet");
             // pStunAttributeRealm->attribute.length does not include null terminator and pStunAttributeRealm->realm is not null terminated
+            // copy the realm
             STRNCPY(pTurnConnection->turnRealm, pStunAttributeRealm->realm, pStunAttributeRealm->attribute.length);
             pTurnConnection->turnRealm[pStunAttributeRealm->attribute.length] = '\0';
 
             pTurnConnection->credentialObtained = TRUE;
-
+            // update the information inside the pre-allocated packets.
             CHK_STATUS(turnConnectionUpdateNonce(pTurnConnection));
             break;
 
@@ -412,6 +481,12 @@ STATUS turnConnectionHandleStunError(PTurnConnection pTurnConnection, PBYTE pBuf
             CHK_STATUS(turnConnectionUpdateNonce(pTurnConnection));
             break;
 
+        case STUN_PACKET_TYPE_BINDING_RESPONSE_ERROR:
+        case STUN_PACKET_TYPE_SHARED_SECRET_ERROR_RESPONSE:
+        case STUN_PACKET_TYPE_ALLOCATE_ERROR_RESPONSE:
+        case STUN_PACKET_TYPE_REFRESH_ERROR_RESPONSE:
+        case STUN_PACKET_TYPE_CREATE_PERMISSION_ERROR_RESPONSE:
+        case STUN_PACKET_TYPE_CHANNEL_BIND_ERROR_RESPONSE:
         default:
             /* Remove peer for any other error */
             DLOGW("Received STUN error response. Error type: 0x%02x, Error Code: %u. attribute len %u, Error detail: %s.", stunPacketType,
@@ -444,20 +519,31 @@ CleanUp:
     return retStatus;
 }
 
-STATUS turnConnectionHandleChannelData(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen, PTurnChannelData pChannelData,
-                                       PUINT32 pChannelDataCount, PUINT32 pProcessedDataLen)
+/**
+ * @brief
+ *
+ * @param[in] pTurnConnection the context of the turn connection.
+ * @param[in] pBuffer
+ * @param[in] bufferLen
+ * @param[in] pChannelData
+ * @param[in] pTurnChannelDataCount
+ * @param[in] pProcessedDataLen
+ *
+ * @return STATUS status of execution.
+ */
+static STATUS turnConnectionHandleChannelData(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen, PTurnChannelData pChannelData,
+                                              PUINT32 pChannelDataCount, PUINT32 pProcessedDataLen)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     BOOL locked = FALSE;
 
-    UINT32 turnChannelDataCount = 0, hexStrLen = 0;
+    UINT32 turnChannelDataCount = 0;
     UINT16 channelNumber = 0;
     PTurnPeer pTurnPeer = NULL;
-    PCHAR hexStr = NULL;
 
-    CHK(pTurnConnection != NULL && pChannelData != NULL && pChannelDataCount != NULL && pProcessedDataLen != NULL, STATUS_NULL_ARG);
-    CHK(pBuffer != NULL && bufferLen > 0, STATUS_INVALID_ARG);
+    CHK(pTurnConnection != NULL && pChannelData != NULL && pChannelDataCount != NULL && pProcessedDataLen != NULL, STATUS_TURN_NULL_ARG);
+    CHK(pBuffer != NULL && bufferLen > 0, STATUS_TURN_INVALID_CHANNEL_BUF);
 
     MUTEX_LOCK(pTurnConnection->lock);
     locked = TRUE;
@@ -480,20 +566,12 @@ STATUS turnConnectionHandleChannelData(PTurnConnection pTurnConnection, PBYTE pB
             }
 
         } else {
-            CHK_STATUS(hexEncode(pBuffer, bufferLen, NULL, &hexStrLen));
-            hexStr = MEMCALLOC(1, hexStrLen * SIZEOF(CHAR));
-            CHK(hexStr != NULL, STATUS_NOT_ENOUGH_MEMORY);
-            CHK_STATUS(hexEncode(pBuffer, bufferLen, hexStr, &hexStrLen));
-            DLOGE("Turn connection does not have channel number, dumping payload: %s", hexStr);
             turnChannelDataCount = 0;
-
-            SAFE_MEMFREE(hexStr);
         }
         *pProcessedDataLen = bufferLen;
 
     } else {
-        CHK_STATUS(
-            turnConnectionHandleChannelDataTcpMode(pTurnConnection, pBuffer, bufferLen, pChannelData, &turnChannelDataCount, pProcessedDataLen));
+        CHK_STATUS(turnConnectionHandleChannelDataTcpMode(pTurnConnection, pBuffer, bufferLen, pChannelData, &turnChannelDataCount, pProcessedDataLen));
     }
 
     *pChannelDataCount = turnChannelDataCount;
@@ -502,9 +580,6 @@ CleanUp:
 
     CHK_LOG_ERR(retStatus);
 
-    if (hexStr != NULL) {
-        SAFE_MEMFREE(hexStr);
-    }
     if (locked) {
         MUTEX_UNLOCK(pTurnConnection->lock);
     }
@@ -513,13 +588,22 @@ CleanUp:
     return retStatus;
 }
 
-/*
- * turnConnectionHandleChannelDataTcpMode will process a single turn channel data item from pBuffer then return.
- * If there is a complete channel data item in buffer, upon return *pTurnChannelDataCount will be 1, *pTurnChannelData
- * will data details about the parsed channel data. *pProcessedDataLen will be the length of data processed.
+/**
+ * @brief turnConnectionHandleChannelDataTcpMode will process a single turn channel data item from pBuffer then return. If there is a complete channel
+ * data item in buffer, upon return *pTurnChannelDataCount will be 1, *pTurnChannelData will data details about the parsed channel data.
+ * *pProcessedDataLen will be the length of data processed.
+ *
+ * @param[in] pTurnConnection
+ * @param[in] pBuffer
+ * @param[in] bufferLen
+ * @param[in] pChannelData
+ * @param[in] pTurnChannelDataCount
+ * @param[in] pProcessedDataLen
+ *
+ * @return STATUS status of execution.
  */
-STATUS turnConnectionHandleChannelDataTcpMode(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen, PTurnChannelData pChannelData,
-                                              PUINT32 pTurnChannelDataCount, PUINT32 pProcessedDataLen)
+static STATUS turnConnectionHandleChannelDataTcpMode(PTurnConnection pTurnConnection, PBYTE pBuffer, UINT32 bufferLen, PTurnChannelData pChannelData,
+                                                     PUINT32 pTurnChannelDataCount, PUINT32 pProcessedDataLen)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
@@ -528,15 +612,14 @@ STATUS turnConnectionHandleChannelDataTcpMode(PTurnConnection pTurnConnection, P
     UINT16 channelNumber = 0;
     PTurnPeer pTurnPeer = NULL;
 
-    CHK(pTurnConnection != NULL && pChannelData != NULL && pTurnChannelDataCount != NULL && pProcessedDataLen != NULL, STATUS_NULL_ARG);
-    CHK(pBuffer != NULL && bufferLen > 0, STATUS_INVALID_ARG);
+    CHK(pTurnConnection != NULL && pChannelData != NULL && pTurnChannelDataCount != NULL && pProcessedDataLen != NULL, STATUS_TURN_NULL_ARG);
+    CHK(pBuffer != NULL && bufferLen > 0, STATUS_TURN_INVALID_TCP_CHANNEL_BUF);
 
     pCurPos = pBuffer;
     remainingBufLen = bufferLen;
     /* process only one channel data and return. Because channel data can be intermixed with STUN packet.
      * need to check remainingBufLen too because channel data could be incomplete. */
     while (remainingBufLen != 0 && channelDataCount == 0) {
-        DLOGV("currRecvDataLen: %d", pTurnConnection->currRecvDataLen);
         if (pTurnConnection->currRecvDataLen != 0) {
             if (pTurnConnection->currRecvDataLen >= TURN_DATA_CHANNEL_SEND_OVERHEAD) {
                 /* pTurnConnection->recvDataBuffer always has channel data start */
@@ -548,7 +631,7 @@ STATUS turnConnectionHandleChannelDataTcpMode(PTurnConnection pTurnConnection, P
                 if (bytesToCopy > (pTurnConnection->recvDataBufferSize - pTurnConnection->currRecvDataLen)) {
                     /* drop current message if it is longer than buffer size. */
                     pTurnConnection->currRecvDataLen = 0;
-                    CHK(FALSE, STATUS_BUFFER_TOO_SMALL);
+                    CHK(FALSE, STATUS_TURN_BUFFER_TOO_SMALL);
                 }
 
                 MEMCPY(pTurnConnection->recvDataBuffer + pTurnConnection->currRecvDataLen, pCurPos, bytesToCopy);
@@ -599,7 +682,7 @@ STATUS turnConnectionHandleChannelDataTcpMode(PTurnConnection pTurnConnection, P
                 pCurPos += (paddedChannelDataLen + TURN_DATA_CHANNEL_SEND_OVERHEAD);
             } else {
                 CHK(pTurnConnection->currRecvDataLen == 0, STATUS_TURN_NEW_DATA_CHANNEL_MSG_HEADER_BEFORE_PREVIOUS_MSG_FINISH);
-                CHK(remainingBufLen <= (pTurnConnection->recvDataBufferSize), STATUS_BUFFER_TOO_SMALL);
+                CHK(remainingBufLen <= (pTurnConnection->recvDataBufferSize), STATUS_TURN_BUFFER_TOO_SMALL);
 
                 MEMCPY(pTurnConnection->recvDataBuffer, pCurPos, remainingBufLen);
                 pTurnConnection->currRecvDataLen += remainingBufLen;
@@ -628,8 +711,8 @@ STATUS turnConnectionAddPeer(PTurnConnection pTurnConnection, PKvsIpAddress pPee
     PTurnPeer pTurnPeer = NULL;
     BOOL locked = FALSE;
 
-    CHK(pTurnConnection != NULL && pPeerAddress != NULL, STATUS_NULL_ARG);
-    CHK(pTurnConnection->turnServer.ipAddress.family == pPeerAddress->family, STATUS_INVALID_ARG);
+    CHK(pTurnConnection != NULL && pPeerAddress != NULL, STATUS_TURN_NULL_ARG);
+    CHK(pTurnConnection->turnServer.ipAddress.family == pPeerAddress->family, STATUS_TURN_MISMATCH_IP_FAMIILY);
     CHK_WARN(IS_IPV4_ADDR(pPeerAddress), retStatus, "Drop IPv6 turn peer because only IPv4 turn peer is supported right now");
 
     MUTEX_LOCK(pTurnConnection->lock);
@@ -637,7 +720,7 @@ STATUS turnConnectionAddPeer(PTurnConnection pTurnConnection, PKvsIpAddress pPee
 
     /* check for duplicate */
     CHK(turnConnectionGetPeerWithIp(pTurnConnection, pPeerAddress) == NULL, retStatus);
-    CHK_WARN(pTurnConnection->turnPeerCount < DEFAULT_TURN_MAX_PEER_COUNT, STATUS_INVALID_OPERATION, "Add peer failed. Max peer count reached");
+    CHK_WARN(pTurnConnection->turnPeerCount < DEFAULT_TURN_MAX_PEER_COUNT, STATUS_TURN_INVALID_OPERATION, "Add peer failed. Max peer count reached");
 
     pTurnPeer = &pTurnConnection->turnPeerList[pTurnConnection->turnPeerCount++];
 
@@ -648,7 +731,8 @@ STATUS turnConnectionAddPeer(PTurnConnection pTurnConnection, PKvsIpAddress pPee
     pTurnPeer->channelNumber = (UINT16) pTurnConnection->turnPeerCount + TURN_CHANNEL_BIND_CHANNEL_NUMBER_BASE;
     pTurnPeer->permissionExpirationTime = INVALID_TIMESTAMP_VALUE;
     pTurnPeer->ready = FALSE;
-
+    pTurnPeer->rto = GETTIME() + (pTurnConnection->turnPeerCount - 1) * 50 * HUNDREDS_OF_NANOS_IN_A_MILLISECOND;
+    //#TBD.
     CHK_STATUS(xorIpAddress(&pTurnPeer->xorAddress, NULL)); /* only work for IPv4 for now */
     CHK_STATUS(createTransactionIdStore(DEFAULT_MAX_STORED_TRANSACTION_ID_COUNT, &pTurnPeer->pTransactionIdStore));
     pTurnPeer = NULL;
@@ -677,12 +761,12 @@ STATUS turnConnectionSendData(PTurnConnection pTurnConnection, PBYTE pBuf, UINT3
     BOOL locked = FALSE;
     BOOL sendLocked = FALSE;
 
-    CHK(pTurnConnection != NULL && pDestIp != NULL, STATUS_NULL_ARG);
-    CHK(pBuf != NULL && bufLen > 0, STATUS_INVALID_ARG);
+    CHK(pTurnConnection != NULL && pDestIp != NULL, STATUS_TURN_NULL_ARG);
+    CHK(pBuf != NULL && bufLen > 0, STATUS_TURN_INVALID_SEND_BUF_ARG);
 
     MUTEX_LOCK(pTurnConnection->lock);
     locked = TRUE;
-
+    // check the status of turn connection.
     if (!(pTurnConnection->state == TURN_STATE_CREATE_PERMISSION || pTurnConnection->state == TURN_STATE_BIND_CHANNEL ||
           pTurnConnection->state == TURN_STATE_READY)) {
         DLOGV("TurnConnection not ready to send data");
@@ -690,7 +774,7 @@ STATUS turnConnectionSendData(PTurnConnection pTurnConnection, PBYTE pBuf, UINT3
         // If turn is not ready yet. Drop the send since ice will retry.
         CHK(FALSE, retStatus);
     }
-
+    // get the turn peer with the ip.
     pSendPeer = turnConnectionGetPeerWithIp(pTurnConnection, pDestIp);
 
     CHK_STATUS(getIpAddrStr(pDestIp, ipAddrStr, ARRAY_SIZE(ipAddrStr)));
@@ -698,7 +782,7 @@ STATUS turnConnectionSendData(PTurnConnection pTurnConnection, PBYTE pBuf, UINT3
         DLOGV("Unable to send data through turn because peer with address %s:%u is not found", ipAddrStr, KVS_GET_IP_ADDRESS_PORT(pDestIp));
         CHK(FALSE, retStatus);
     } else if (pSendPeer->connectionState == TURN_PEER_CONN_STATE_FAILED) {
-        CHK(FALSE, STATUS_TURN_CONNECTION_PEER_NOT_USABLE);
+        CHK(FALSE, STATUS_TURN_PEER_NOT_USABLE);
     } else if (!pSendPeer->ready) {
         DLOGV("Unable to send data through turn because turn channel is not established with peer with address %s:%u", ipAddrStr,
               KVS_GET_IP_ADDRESS_PORT(pDestIp));
@@ -712,23 +796,29 @@ STATUS turnConnectionSendData(PTurnConnection pTurnConnection, PBYTE pBuf, UINT3
     MUTEX_LOCK(pTurnConnection->sendLock);
     sendLocked = TRUE;
 
-    CHK(pTurnConnection->dataBufferSize - TURN_DATA_CHANNEL_SEND_OVERHEAD >= bufLen, STATUS_BUFFER_TOO_SMALL);
-
+    CHK(pTurnConnection->dataBufferSize - TURN_DATA_CHANNEL_SEND_OVERHEAD >= bufLen, STATUS_TURN_BUFFER_TOO_SMALL);
+    /**
+     * Over TCP and TLS-over-TCP, the ChannelData message MUST be padded to
+     * a multiple of four bytes in order to ensure the alignment of
+     * subsequent messages. The padding is not reflected in the length
+     * field of the ChannelData message, so the actual size of a ChannelData
+     * message (including padding) is (4 + Length) rounded up to the nearest
+     * multiple of 4
+     * https://tools.ietf.org/html/rfc5766#section-11.5
+     */
     paddedDataLen = (UINT32) ROUND_UP(TURN_DATA_CHANNEL_SEND_OVERHEAD + bufLen, 4);
 
     /* generate data channel TURN message */
-    putInt16((PINT16) (pTurnConnection->sendDataBuffer), pSendPeer->channelNumber);
-    putInt16((PINT16) (pTurnConnection->sendDataBuffer + 2), (UINT16) bufLen);
+    putInt16((PINT16)(pTurnConnection->sendDataBuffer), pSendPeer->channelNumber);
+    putInt16((PINT16)(pTurnConnection->sendDataBuffer + 2), (UINT16) bufLen);
     MEMCPY(pTurnConnection->sendDataBuffer + TURN_DATA_CHANNEL_SEND_OVERHEAD, pBuf, bufLen);
-
+    // send the packet after re-mapping.
     retStatus = iceUtilsSendData(pTurnConnection->sendDataBuffer, paddedDataLen, &pTurnConnection->turnServer.ipAddress,
                                  pTurnConnection->pControlChannel, NULL, FALSE);
 
     if (STATUS_FAILED(retStatus)) {
         DLOGW("iceUtilsSendData failed with 0x%08x", retStatus);
-        if (retStatus != STATUS_SOCKET_CONNECTION_CLOSED_ALREADY) {
-            retStatus = STATUS_SUCCESS;
-        }
+        retStatus = STATUS_SUCCESS;
     }
 
 CleanUp:
@@ -752,7 +842,7 @@ STATUS turnConnectionStart(PTurnConnection pTurnConnection)
     BOOL locked = FALSE;
     SIZE_T timerCallbackId;
 
-    CHK(pTurnConnection != NULL, STATUS_NULL_ARG);
+    CHK(pTurnConnection != NULL, STATUS_TURN_NULL_ARG);
 
     MUTEX_LOCK(pTurnConnection->lock);
     locked = TRUE;
@@ -785,13 +875,20 @@ CleanUp:
     return retStatus;
 }
 
-STATUS turnConnectionRefreshAllocation(PTurnConnection pTurnConnection)
+/**
+ * @brief send the stun packet of refresh allocation.
+ *
+ * @param[in] pTurnConnection the context of the turn connection.
+ *
+ * @return STATUS status of execution.
+ */
+static STATUS turnConnectionRefreshAllocation(PTurnConnection pTurnConnection)
 {
     STATUS retStatus = STATUS_SUCCESS;
     UINT64 currTime = 0;
     PStunAttributeLifetime pStunAttributeLifetime = NULL;
 
-    CHK(pTurnConnection != NULL, STATUS_NULL_ARG);
+    CHK(pTurnConnection != NULL, STATUS_TURN_NULL_ARG);
 
     currTime = GETTIME();
     // return early if we are not in grace period yet or if we just sent refresh earlier
@@ -821,7 +918,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS turnConnectionRefreshPermission(PTurnConnection pTurnConnection, PBOOL pNeedRefresh)
+static STATUS turnConnectionRefreshPermission(PTurnConnection pTurnConnection, PBOOL pNeedRefresh)
 {
     STATUS retStatus = STATUS_SUCCESS;
     UINT64 currTime = 0;
@@ -829,7 +926,7 @@ STATUS turnConnectionRefreshPermission(PTurnConnection pTurnConnection, PBOOL pN
     BOOL needRefresh = FALSE;
     UINT32 i;
 
-    CHK(pTurnConnection != NULL && pNeedRefresh != NULL, STATUS_NULL_ARG);
+    CHK(pTurnConnection != NULL && pNeedRefresh != NULL, STATUS_TURN_NULL_ARG);
 
     currTime = GETTIME();
 
@@ -853,11 +950,11 @@ CleanUp:
     return retStatus;
 }
 
-STATUS turnConnectionFreePreAllocatedPackets(PTurnConnection pTurnConnection)
+static STATUS turnConnectionFreePreAllocatedPackets(PTurnConnection pTurnConnection)
 {
     STATUS retStatus = STATUS_SUCCESS;
 
-    CHK(pTurnConnection != NULL, STATUS_NULL_ARG);
+    CHK(pTurnConnection != NULL, STATUS_TURN_NULL_ARG);
 
     if (pTurnConnection->pTurnPacket != NULL) {
         CHK_STATUS(freeStunPacket(&pTurnConnection->pTurnPacket));
@@ -892,7 +989,7 @@ STATUS turnConnectionStepState(PTurnConnection pTurnConnection)
     BOOL refreshPeerPermission = FALSE;
     UINT32 i = 0;
 
-    CHK(pTurnConnection != NULL, STATUS_NULL_ARG);
+    CHK(pTurnConnection != NULL, STATUS_TURN_NULL_ARG);
 
     previousState = pTurnConnection->state;
 
@@ -921,7 +1018,7 @@ STATUS turnConnectionStepState(PTurnConnection pTurnConnection)
                 pTurnConnection->state = TURN_STATE_GET_CREDENTIALS;
                 pTurnConnection->stateTimeoutTime = currentTime + DEFAULT_TURN_GET_CREDENTIAL_TIMEOUT;
             } else {
-                CHK(currentTime < pTurnConnection->stateTimeoutTime, STATUS_TURN_CONNECTION_STATE_TRANSITION_TIMEOUT);
+                CHK(currentTime < pTurnConnection->stateTimeoutTime, STATUS_TURN_CHECK_CONN_TIMEOUT);
             }
 
         case TURN_STATE_GET_CREDENTIALS:
@@ -934,6 +1031,12 @@ STATUS turnConnectionStepState(PTurnConnection pTurnConnection)
                 CHK_STATUS(turnConnectionGetLongTermKey(pTurnConnection->turnServer.username, pTurnConnection->turnRealm,
                                                         pTurnConnection->turnServer.credential, pTurnConnection->longTermKey,
                                                         SIZEOF(pTurnConnection->longTermKey)));
+                // we extract the realm and nonce fromt the 401 response of the first turn allocation packet, and
+                // send the turn allocation packet again.
+                // DLOGD("username: %s, turnRealm: %s, turnNonce: %s, nonceLen: %d", pTurnConnection->turnServer.username,
+                //                                                                    pTurnConnection->turnRealm,
+                //                                                                    pTurnConnection->turnNonce,
+                //                                                                    pTurnConnection->nonceLen);
                 CHK_STATUS(turnConnectionPackageTurnAllocationRequest(pTurnConnection->turnServer.username, pTurnConnection->turnRealm,
                                                                       pTurnConnection->turnNonce, pTurnConnection->nonceLen,
                                                                       DEFAULT_TURN_ALLOCATION_LIFETIME_SECONDS, &pTurnConnection->pTurnPacket));
@@ -941,12 +1044,12 @@ STATUS turnConnectionStepState(PTurnConnection pTurnConnection)
                 pTurnConnection->state = TURN_STATE_ALLOCATION;
                 pTurnConnection->stateTimeoutTime = currentTime + DEFAULT_TURN_ALLOCATION_TIMEOUT;
             } else {
-                CHK(currentTime < pTurnConnection->stateTimeoutTime, STATUS_TURN_CONNECTION_STATE_TRANSITION_TIMEOUT);
+                CHK(currentTime < pTurnConnection->stateTimeoutTime, STATUS_TURN_GET_CREDENTIALS_TIMEOUT);
             }
             break;
 
         case TURN_STATE_ALLOCATION:
-
+            // already get the allocation response.
             if (ATOMIC_LOAD_BOOL(&pTurnConnection->hasAllocation)) {
                 CHK_STATUS(getIpAddrStr(&pTurnConnection->relayAddress, ipAddrStr, ARRAY_SIZE(ipAddrStr)));
                 DLOGD("Relay address received: %s, port: %u", ipAddrStr, (UINT16) getInt16(pTurnConnection->relayAddress.port));
@@ -954,12 +1057,17 @@ STATUS turnConnectionStepState(PTurnConnection pTurnConnection)
                 if (pTurnConnection->pTurnCreatePermissionPacket != NULL) {
                     CHK_STATUS(freeStunPacket(&pTurnConnection->pTurnCreatePermissionPacket));
                 }
+                // create the packet of permsssion.
                 CHK_STATUS(createStunPacket(STUN_PACKET_TYPE_CREATE_PERMISSION, NULL, &pTurnConnection->pTurnCreatePermissionPacket));
                 // use host address as placeholder. hostAddress should have the same family as peer address
+                // host address.
                 CHK_STATUS(appendStunAddressAttribute(pTurnConnection->pTurnCreatePermissionPacket, STUN_ATTRIBUTE_TYPE_XOR_PEER_ADDRESS,
                                                       &pTurnConnection->hostAddress));
+                // server username.
                 CHK_STATUS(appendStunUsernameAttribute(pTurnConnection->pTurnCreatePermissionPacket, pTurnConnection->turnServer.username));
+                // realm
                 CHK_STATUS(appendStunRealmAttribute(pTurnConnection->pTurnCreatePermissionPacket, pTurnConnection->turnRealm));
+                // nonce
                 CHK_STATUS(
                     appendStunNonceAttribute(pTurnConnection->pTurnCreatePermissionPacket, pTurnConnection->turnNonce, pTurnConnection->nonceLen));
 
@@ -991,7 +1099,7 @@ STATUS turnConnectionStepState(PTurnConnection pTurnConnection)
                 pTurnConnection->stateTimeoutTime = currentTime + DEFAULT_TURN_CREATE_PERMISSION_TIMEOUT;
 
             } else {
-                CHK(currentTime < pTurnConnection->stateTimeoutTime, STATUS_TURN_CONNECTION_STATE_TRANSITION_TIMEOUT);
+                CHK(currentTime < pTurnConnection->stateTimeoutTime, STATUS_TURN_ALLOCATION_TIMEOUT);
             }
             break;
 
@@ -1011,9 +1119,9 @@ STATUS turnConnectionStepState(PTurnConnection pTurnConnection)
                 pTurnConnection->stateTimeoutTime = currentTime + DEFAULT_TURN_CREATE_PERMISSION_TIMEOUT;
                 CHK(FALSE, retStatus);
             }
-
+            // if timeout is done,
             if (currentTime >= pTurnConnection->stateTimeoutTime) {
-                CHK(channelWithPermissionCount > 0, STATUS_TURN_CONNECTION_FAILED_TO_CREATE_PERMISSION);
+                CHK(channelWithPermissionCount > 0, STATUS_TURN_FAILED_TO_CREATE_PERMISSION);
 
                 // go to next state if we have at least one ready peer
                 pTurnConnection->state = TURN_STATE_BIND_CHANNEL;
@@ -1022,15 +1130,15 @@ STATUS turnConnectionStepState(PTurnConnection pTurnConnection)
             break;
 
         case TURN_STATE_BIND_CHANNEL:
-
+            // check the stae of each peers.
             for (i = 0; i < pTurnConnection->turnPeerCount; ++i) {
                 if (pTurnConnection->turnPeerList[i].connectionState == TURN_PEER_CONN_STATE_READY) {
                     readyPeerCount++;
                 }
             }
-
+            // if timeout or the number of ready peer is reached, we switch to ready state.
             if (currentTime >= pTurnConnection->stateTimeoutTime || readyPeerCount == pTurnConnection->turnPeerCount) {
-                CHK(readyPeerCount > 0, STATUS_TURN_CONNECTION_FAILED_TO_BIND_CHANNEL);
+                CHK(readyPeerCount > 0, STATUS_TURN_FAILED_TO_BIND_CHANNEL);
                 // go to next state if we have at least one ready peer
                 pTurnConnection->state = TURN_STATE_READY;
             }
@@ -1039,6 +1147,7 @@ STATUS turnConnectionStepState(PTurnConnection pTurnConnection)
         case TURN_STATE_READY:
 
             CHK_STATUS(turnConnectionRefreshPermission(pTurnConnection, &refreshPeerPermission));
+            // need to refresh permission.
             if (refreshPeerPermission) {
                 // reset pTurnPeer->connectionState to make them go through create permission and channel bind again
                 for (i = 0; i < pTurnConnection->turnPeerCount; ++i) {
@@ -1099,8 +1208,8 @@ CleanUp:
 
     CHK_LOG_ERR(retStatus);
 
-    if (STATUS_SUCCEEDED(retStatus) && ATOMIC_LOAD_BOOL(&pTurnConnection->stopTurnConnection) && pTurnConnection->state != TURN_STATE_CLEAN_UP &&
-        pTurnConnection->state != TURN_STATE_NEW) {
+    if (STATUS_SUCCEEDED(retStatus) && ATOMIC_LOAD_BOOL(&pTurnConnection->stopTurnConnection) &&
+        pTurnConnection->state != TURN_STATE_CLEAN_UP && pTurnConnection->state != TURN_STATE_NEW) {
         pTurnConnection->state = TURN_STATE_CLEAN_UP;
         pTurnConnection->stateTimeoutTime = currentTime + DEFAULT_TURN_CLEAN_UP_TIMEOUT;
     }
@@ -1122,7 +1231,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS turnConnectionUpdateNonce(PTurnConnection pTurnConnection)
+static STATUS turnConnectionUpdateNonce(PTurnConnection pTurnConnection)
 {
     STATUS retStatus = STATUS_SUCCESS;
 
@@ -1156,7 +1265,7 @@ STATUS turnConnectionShutdown(PTurnConnection pTurnConnection, UINT64 waitUntilA
     STATUS retStatus = STATUS_SUCCESS;
     UINT64 currentTime = 0, timeoutTime = 0;
     BOOL locked = FALSE;
-    CHK(pTurnConnection != NULL, STATUS_NULL_ARG);
+    CHK(pTurnConnection != NULL, STATUS_TURN_NULL_ARG);
 
     ATOMIC_STORE(&pTurnConnection->stopTurnConnection, TRUE);
 
@@ -1214,7 +1323,16 @@ BOOL turnConnectionGetRelayAddress(PTurnConnection pTurnConnection, PKvsIpAddres
     return FALSE;
 }
 
-STATUS turnConnectionTimerCallback(UINT32 timerId, UINT64 currentTime, UINT64 customData)
+/**
+ * @brief the callback for the fsm of the turn connection.
+ *
+ * @param[in] timerId the timer id.
+ * @param[in] currentTime the current time.
+ * @param[in] customData the user data.
+ *
+ * @return STATUS status of execution.
+ */
+static STATUS turnConnectionTimerCallback(UINT32 timerId, UINT64 currentTime, UINT64 customData)
 {
     UNUSED_PARAM(timerId);
     UNUSED_PARAM(currentTime);
@@ -1227,13 +1345,17 @@ STATUS turnConnectionTimerCallback(UINT32 timerId, UINT64 currentTime, UINT64 cu
     PStunAttributeLifetime pStunAttributeLifetime = NULL;
     UINT32 i = 0;
 
-    CHK(pTurnConnection != NULL, STATUS_NULL_ARG);
+    CHK(pTurnConnection != NULL, STATUS_TURN_NULL_ARG);
 
-    MUTEX_LOCK(pTurnConnection->lock);
+    // MUTEX_LOCK(pTurnConnection->lock);
+    CHK_WARN(MUTEX_WAITLOCK(pTurnConnection->lock, 50 * HUNDREDS_OF_NANOS_IN_A_MILLISECOND) == TRUE, STATUS_TURN_ACQUIRE_MUTEX,
+             "turnConnectionTimerCallback failed");
     locked = TRUE;
 
     switch (pTurnConnection->state) {
         case TURN_STATE_GET_CREDENTIALS:
+            // do not have information of the crendential, so leave the password as blank.
+            // when you receive 401 response, you can retrieve the information from it.
             sendStatus = iceUtilsSendStunPacket(pTurnConnection->pTurnPacket, NULL, 0, &pTurnConnection->turnServer.ipAddress,
                                                 pTurnConnection->pControlChannel, NULL, FALSE);
             break;
@@ -1250,23 +1372,33 @@ STATUS turnConnectionTimerCallback(UINT32 timerId, UINT64 currentTime, UINT64 cu
         case TURN_STATE_READY:
             for (i = 0; i < pTurnConnection->turnPeerCount; ++i) {
                 pTurnPeer = &pTurnConnection->turnPeerList[i];
-
+                // send the create-permission packets.
                 if (pTurnPeer->connectionState == TURN_PEER_CONN_STATE_CREATE_PERMISSION) {
                     // update peer address;
-                    CHK_STATUS(getStunAttribute(pTurnConnection->pTurnCreatePermissionPacket, STUN_ATTRIBUTE_TYPE_XOR_PEER_ADDRESS,
-                                                (PStunAttributeHeader*) &pStunAttributeAddress));
-                    CHK_WARN(pStunAttributeAddress != NULL, STATUS_INTERNAL_ERROR, "xor peer address attribute not found");
-                    pStunAttributeAddress->address = pTurnPeer->address;
+                    UINT64 curTime = GETTIME();
+                    if (curTime > pTurnPeer->rto) {
+                        CHK_STATUS(getStunAttribute(pTurnConnection->pTurnCreatePermissionPacket, STUN_ATTRIBUTE_TYPE_XOR_PEER_ADDRESS,
+                                                    (PStunAttributeHeader*) &pStunAttributeAddress));
+                        CHK_WARN(pStunAttributeAddress != NULL, STATUS_INTERNAL_ERROR, "xor peer address attribute not found");
+                        pStunAttributeAddress->address = pTurnPeer->address;
 
                     CHK_STATUS(iceUtilsGenerateTransactionId(pTurnConnection->pTurnCreatePermissionPacket->header.transactionId,
                                                              ARRAY_SIZE(pTurnConnection->pTurnCreatePermissionPacket->header.transactionId)));
 
-                    CHK(pTurnPeer->pTransactionIdStore != NULL, STATUS_INVALID_OPERATION);
+                        CHK(pTurnPeer->pTransactionIdStore != NULL, STATUS_TURN_INVALID_OPERATION);
                     transactionIdStoreInsert(pTurnPeer->pTransactionIdStore, pTurnConnection->pTurnCreatePermissionPacket->header.transactionId);
+                        // send the packet of create-permission.
                     sendStatus = iceUtilsSendStunPacket(pTurnConnection->pTurnCreatePermissionPacket, pTurnConnection->longTermKey,
                                                         ARRAY_SIZE(pTurnConnection->longTermKey), &pTurnConnection->turnServer.ipAddress,
                                                         pTurnConnection->pControlChannel, NULL, FALSE);
+                        if (STATUS_SUCCEEDED(sendStatus)) {
+                            pTurnPeer->rto = curTime +
+                                MAX(500 * HUNDREDS_OF_NANOS_IN_A_MILLISECOND,
+                                    pTurnConnection->turnPeerCount * 50 * HUNDREDS_OF_NANOS_IN_A_MILLISECOND);
+                        }
+                    }
 
+                    // send bind-channel packets.
                 } else if (pTurnPeer->connectionState == TURN_PEER_CONN_STATE_BIND_CHANNEL) {
                     // update peer address;
                     CHK_STATUS(getStunAttribute(pTurnConnection->pTurnChannelBindPacket, STUN_ATTRIBUTE_TYPE_XOR_PEER_ADDRESS,
@@ -1283,7 +1415,7 @@ STATUS turnConnectionTimerCallback(UINT32 timerId, UINT64 currentTime, UINT64 cu
                     CHK_STATUS(iceUtilsGenerateTransactionId(pTurnConnection->pTurnChannelBindPacket->header.transactionId,
                                                              ARRAY_SIZE(pTurnConnection->pTurnChannelBindPacket->header.transactionId)));
 
-                    CHK(pTurnPeer->pTransactionIdStore != NULL, STATUS_INVALID_OPERATION);
+                    CHK(pTurnPeer->pTransactionIdStore != NULL, STATUS_TURN_INVALID_OPERATION);
                     transactionIdStoreInsert(pTurnPeer->pTransactionIdStore, pTurnConnection->pTurnChannelBindPacket->header.transactionId);
                     sendStatus = iceUtilsSendStunPacket(pTurnConnection->pTurnChannelBindPacket, pTurnConnection->longTermKey,
                                                         ARRAY_SIZE(pTurnConnection->longTermKey), &pTurnConnection->turnServer.ipAddress,
@@ -1291,11 +1423,12 @@ STATUS turnConnectionTimerCallback(UINT32 timerId, UINT64 currentTime, UINT64 cu
                 }
             }
 
-            CHK_STATUS(turnConnectionRefreshAllocation(pTurnConnection));
+            CHK(turnConnectionRefreshAllocation(pTurnConnection) == STATUS_SUCCESS, STATUS_TURN_FSM_REFRESH_ALLOCATION);
             break;
 
         case TURN_STATE_CLEAN_UP:
             if (ATOMIC_LOAD_BOOL(&pTurnConnection->hasAllocation)) {
+                DLOGD("send the deallocation packet");
                 CHK_STATUS(getStunAttribute(pTurnConnection->pTurnAllocationRefreshPacket, STUN_ATTRIBUTE_TYPE_LIFETIME,
                                             (PStunAttributeHeader*) &pStunAttributeLifetime));
                 CHK(pStunAttributeLifetime != NULL, STATUS_INTERNAL_ERROR);
@@ -1316,7 +1449,7 @@ STATUS turnConnectionTimerCallback(UINT32 timerId, UINT64 currentTime, UINT64 cu
             break;
     }
 
-    if (sendStatus == STATUS_SOCKET_CONNECTION_CLOSED_ALREADY) {
+    if (sendStatus == STATUS_SOCKET_CONN_CLOSED_ALREADY) {
         DLOGE("TurnConnection socket %d closed unexpectedly", pTurnConnection->pControlChannel->localSocket);
         turnConnectionFatalError(pTurnConnection, sendStatus);
     }
@@ -1331,7 +1464,7 @@ STATUS turnConnectionTimerCallback(UINT32 timerId, UINT64 currentTime, UINT64 cu
     }
 
 CleanUp:
-
+    CHK_LOG_ERR(sendStatus);
     CHK_LOG_ERR(retStatus);
 
     if (locked) {
@@ -1347,17 +1480,27 @@ CleanUp:
 
     return retStatus;
 }
-
-STATUS turnConnectionGetLongTermKey(PCHAR username, PCHAR realm, PCHAR password, PBYTE pBuffer, UINT32 bufferLen)
+/**
+ * @brief   get the long term key according to the md5 generation of the username, realm, and password.
+ *
+ * @param[in] username
+ * @param[in] realm
+ * @param[in] password
+ * @param[in, out] pBuffer
+ * @param[in] bufferLen
+ *
+ * @return STATUS status of execution.
+ */
+static STATUS turnConnectionGetLongTermKey(PCHAR username, PCHAR realm, PCHAR password, PBYTE pBuffer, UINT32 bufferLen)
 {
     STATUS retStatus = STATUS_SUCCESS;
     CHAR stringBuffer[STUN_MAX_USERNAME_LEN + MAX_ICE_CONFIG_CREDENTIAL_LEN + STUN_MAX_REALM_LEN + 2]; // 2 for two ":" between each value
 
-    CHK(username != NULL && realm != NULL && password != NULL && pBuffer != NULL, STATUS_NULL_ARG);
-    CHK(username[0] != '\0' && realm[0] != '\0' && password[0] != '\0' && bufferLen >= KVS_MD5_DIGEST_LENGTH, STATUS_INVALID_ARG);
-    CHK((STRLEN(username) + STRLEN(realm) + STRLEN(password)) <= ARRAY_SIZE(stringBuffer) - 2, STATUS_INVALID_ARG);
+    CHK(username != NULL && realm != NULL && password != NULL && pBuffer != NULL, STATUS_TURN_NULL_ARG);
+    CHK(username[0] != '\0' && realm[0] != '\0' && password[0] != '\0' && bufferLen >= KVS_MD5_DIGEST_LENGTH, STATUS_TURN_INVALID_LONG_TERM_KEY_ARG);
+    CHK((STRLEN(username) + STRLEN(realm) + STRLEN(password)) <= ARRAY_SIZE(stringBuffer) - 2, STATUS_TURN_INVALID_LONG_TERM_KEY_ARG);
 
-    SPRINTF(stringBuffer, "%s:%s:%s", username, realm, password);
+    SNPRINTF(stringBuffer, ARRAY_SIZE(stringBuffer), "%s:%s:%s", username, realm, password);
 
     // TODO: Return back the error check
     KVS_MD5_DIGEST((PBYTE) stringBuffer, STRLEN(stringBuffer), pBuffer);
@@ -1366,16 +1509,28 @@ CleanUp:
 
     return retStatus;
 }
-
-STATUS turnConnectionPackageTurnAllocationRequest(PCHAR username, PCHAR realm, PBYTE nonce, UINT16 nonceLen, UINT32 lifetime,
-                                                  PStunPacket* ppStunPacket)
+/**
+ * @brief   generate the stun packet of turn allocation.
+ *          https://tools.ietf.org/html/rfc5766#section-2.2
+ *
+ * @param[in] username
+ * @param[in] realm
+ * @param[in] nonce
+ * @param[in] nonceLen
+ * @param[in] lifetime  the life time of this turn allocation.
+ * @param[out] ppStunPacket the pointer of this stun packet.
+ *
+ * @return STATUS status of execution
+ */
+static STATUS turnConnectionPackageTurnAllocationRequest(PCHAR username, PCHAR realm, PBYTE nonce, UINT16 nonceLen, UINT32 lifetime,
+                                                         PStunPacket* ppStunPacket)
 {
     STATUS retStatus = STATUS_SUCCESS;
     PStunPacket pTurnAllocateRequest = NULL;
 
-    CHK(ppStunPacket != NULL, STATUS_NULL_ARG);
+    CHK(ppStunPacket != NULL, STATUS_TURN_NULL_ARG);
     CHK((username == NULL && realm == NULL && nonce == NULL) || (username != NULL && realm != NULL && nonce != NULL && nonceLen > 0),
-        STATUS_INVALID_ARG);
+        STATUS_TURN_INVALID_PACK_ALLOCATION_ARG);
 
     CHK_STATUS(createStunPacket(STUN_PACKET_TYPE_ALLOCATE, NULL, &pTurnAllocateRequest));
     CHK_STATUS(appendStunLifetimeAttribute(pTurnAllocateRequest, lifetime));
@@ -1402,7 +1557,7 @@ CleanUp:
     return retStatus;
 }
 
-PCHAR turnConnectionGetStateStr(TURN_CONNECTION_STATE state)
+static PCHAR turnConnectionGetStateStr(TURN_CONNECTION_STATE state)
 {
     switch (state) {
         case TURN_STATE_NEW:
@@ -1427,7 +1582,7 @@ PCHAR turnConnectionGetStateStr(TURN_CONNECTION_STATE state)
     return TURN_STATE_UNKNOWN_STR;
 }
 
-PTurnPeer turnConnectionGetPeerWithChannelNumber(PTurnConnection pTurnConnection, UINT16 channelNumber)
+static PTurnPeer turnConnectionGetPeerWithChannelNumber(PTurnConnection pTurnConnection, UINT16 channelNumber)
 {
     PTurnPeer pTurnPeer = NULL;
     UINT32 i = 0;
@@ -1440,8 +1595,15 @@ PTurnPeer turnConnectionGetPeerWithChannelNumber(PTurnConnection pTurnConnection
 
     return pTurnPeer;
 }
-
-PTurnPeer turnConnectionGetPeerWithIp(PTurnConnection pTurnConnection, PKvsIpAddress pKvsIpAddress)
+/**
+ * @brief   get the context of remote peer according to input ip address.
+ *
+ * @param[in] pTurnConnection the context of the turn connection.
+ * @param[in] pKvsIpAddress the target ip address.
+ *
+ * @return PTurnPeer the context of remote peer.
+ */
+static PTurnPeer turnConnectionGetPeerWithIp(PTurnConnection pTurnConnection, PKvsIpAddress pKvsIpAddress)
 {
     PTurnPeer pTurnPeer = NULL;
     UINT32 i = 0;
@@ -1455,7 +1617,7 @@ PTurnPeer turnConnectionGetPeerWithIp(PTurnConnection pTurnConnection, PKvsIpAdd
     return pTurnPeer;
 }
 
-VOID turnConnectionFatalError(PTurnConnection pTurnConnection, STATUS errorStatus)
+static VOID turnConnectionFatalError(PTurnConnection pTurnConnection, STATUS errorStatus)
 {
     if (pTurnConnection == NULL) {
         return;

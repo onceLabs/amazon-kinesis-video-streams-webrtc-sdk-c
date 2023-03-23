@@ -1,6 +1,17 @@
-/*******************************************
-Signaling internal include file
-*******************************************/
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
 #ifndef __KINESIS_VIDEO_WEBRTC_CHANNEL_INFO__
 #define __KINESIS_VIDEO_WEBRTC_CHANNEL_INFO__
 
@@ -9,7 +20,14 @@ Signaling internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
+#include "kvs/webrtc_client.h"
 
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
 // Max control plane URI char len
 #define MAX_CONTROL_PLANE_URI_CHAR_LEN 256
 
@@ -32,11 +50,17 @@ extern "C" {
 #define MIN_SIGNALING_MESSAGE_TTL_VALUE (5 * HUNDREDS_OF_NANOS_IN_A_SECOND)
 #define MAX_SIGNALING_MESSAGE_TTL_VALUE (120 * HUNDREDS_OF_NANOS_IN_A_SECOND)
 
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 /**
- * Takes in a pointer to a public version of ChannelInfo object.
+ * @brief Takes in a pointer to a public version of ChannelInfo object.
  * Validates and creates an internal object
  *
- * @return - STATUS code of the execution
+ * @param[in] pOrigChannelInfo
+ * @param[in, out] ppChannelInfo
+ *
+ * @return STATUS code of the execution. STATUS_SUCCESS on success.
  */
 STATUS createValidateChannelInfo(PChannelInfo, PChannelInfo*);
 

@@ -1,12 +1,35 @@
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
+#ifdef ENABLE_DATA_CHANNEL
+
 #define LOG_CLASS "DataChannel"
-
 #include "../Include_i.h"
+#include "PeerConnection.h"
+#include "Sctp.h"
+#include "DataChannel.h"
 
-STATUS connectLocalDataChannel()
-{
-    return STATUS_SUCCESS;
-}
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
 
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 STATUS createDataChannel(PRtcPeerConnection pPeerConnection, PCHAR pDataChannelName, PRtcDataChannelInit pRtcDataChannelInit,
                          PRtcDataChannel* ppRtcDataChannel)
 {
@@ -19,8 +42,7 @@ STATUS createDataChannel(PRtcPeerConnection pPeerConnection, PCHAR pDataChannelN
     CHK(pKvsPeerConnection != NULL && pDataChannelName != NULL && ppRtcDataChannel != NULL, STATUS_NULL_ARG);
 
     // Only support creating DataChannels before signaling for now
-    CHK(pKvsPeerConnection->pSctpSession == NULL, STATUS_INTERNAL_ERROR);
-
+    CHK(pKvsPeerConnection->pSctpSession == NULL, STATUS_PEER_CONN_NO_SCTP_SESSION);
     CHK((pKvsDataChannel = (PKvsDataChannel) MEMCALLOC(1, SIZEOF(KvsDataChannel))) != NULL, STATUS_NOT_ENOUGH_MEMORY);
     STRNCPY(pKvsDataChannel->dataChannel.name, pDataChannelName, MAX_DATA_CHANNEL_NAME_LEN);
     pKvsDataChannel->pRtcPeerConnection = (PRtcPeerConnection) pKvsPeerConnection;
@@ -105,3 +127,4 @@ CleanUp:
     LEAVES();
     return retStatus;
 }
+#endif

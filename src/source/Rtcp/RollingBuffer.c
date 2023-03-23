@@ -1,6 +1,6 @@
 #define LOG_CLASS "RollingBuffer"
 
-#include "../Include_i.h"
+#include "RollingBuffer.h"
 
 STATUS createRollingBuffer(UINT32 capacity, FreeDataFunc freeDataFunc, PRollingBuffer* ppRollingBuffer)
 {
@@ -82,13 +82,17 @@ STATUS rollingBufferAppendData(PRollingBuffer pRollingBuffer, UINT64 data, PUINT
         pRollingBuffer->dataBuffer[ROLLING_BUFFER_MAP_INDEX(pRollingBuffer, pRollingBuffer->tailIndex)] = data;
         pRollingBuffer->headIndex = pRollingBuffer->tailIndex + 1;
     } else {
+        /** the rolling buffer may be overflow. need to see how to implement a better one. */
         if (pRollingBuffer->headIndex == pRollingBuffer->tailIndex + pRollingBuffer->capacity) {
+            DLOGV("rolling buffer may be overflow.");
+            /** #TBD, need to review. */
             if (pRollingBuffer->freeDataFn != NULL) {
                 CHK_STATUS(
                     pRollingBuffer->freeDataFn(pRollingBuffer->dataBuffer + ROLLING_BUFFER_MAP_INDEX(pRollingBuffer, pRollingBuffer->tailIndex)));
             }
             pRollingBuffer->tailIndex++;
         }
+        /** append the buffer into this rolling buffer. */
         pRollingBuffer->dataBuffer[ROLLING_BUFFER_MAP_INDEX(pRollingBuffer, pRollingBuffer->headIndex)] = data;
         pRollingBuffer->headIndex++;
     }

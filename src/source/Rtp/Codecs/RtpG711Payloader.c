@@ -1,6 +1,7 @@
 #define LOG_CLASS "RtpG711Payloader"
 
 #include "../../Include_i.h"
+#include "RtpG711Payloader.h"
 
 STATUS createPayloadForG711(UINT32 mtu, PBYTE g711Frame, UINT32 g711FrameLength, PBYTE payloadBuffer, PUINT32 pPayloadLength,
                             PUINT32 pPayloadSubLength, PUINT32 pPayloadSubLenSize)
@@ -22,11 +23,12 @@ STATUS createPayloadForG711(UINT32 mtu, PBYTE g711Frame, UINT32 g711FrameLength,
     // Only return size if given buffer is NULL
     CHK(!sizeCalculationOnly, retStatus);
     CHK(payloadLength <= *pPayloadLength && payloadSubLenSize <= *pPayloadSubLenSize, STATUS_BUFFER_TOO_SMALL);
-
+    // copy all the data into the payload buffer.
     MEMCPY(payloadBuffer, g711Frame, g711FrameLength);
     for (remainingLength = g711FrameLength; remainingLength > mtu; remainingLength -= mtu, pCurSubLen++) {
         *pCurSubLen = mtu;
     }
+    // the length of the last packet.
     *pCurSubLen = remainingLength;
 
 CleanUp:

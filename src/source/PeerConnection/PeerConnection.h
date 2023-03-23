@@ -1,6 +1,17 @@
-/*******************************************
-PeerConnection internal include file
-*******************************************/
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
 #ifndef __KINESIS_VIDEO_WEBRTC_CLIENT_PEERCONNECTION_PEERCONNECTION__
 #define __KINESIS_VIDEO_WEBRTC_CLIENT_PEERCONNECTION_PEERCONNECTION__
 
@@ -9,7 +20,22 @@ PeerConnection internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
+#include "kvs/error.h"
+#include "kvs/common_defs.h"
+#include "HashTable.h"
+#include "DoubleLinkedList.h"
+#include "Dtls.h"
+#include "IceAgent.h"
+#include "Network.h"
+#include "SrtpSession.h"
+#include "Sctp.h"
 
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
 #define LOCAL_ICE_UFRAG_LEN 4
 #define LOCAL_ICE_PWD_LEN   24
 #define LOCAL_CNAME_LEN     16
@@ -38,46 +64,28 @@ extern "C" {
 // Environment variable to display SDPs
 #define DEBUG_LOG_SDP ((PCHAR) "DEBUG_LOG_SDP")
 
-typedef enum {
+typedef enum __RTX_CODEC {
     RTC_RTX_CODEC_H264_PROFILE_42E01F_LEVEL_ASYMMETRY_ALLOWED_PACKETIZATION_MODE = 1,
     RTC_RTX_CODEC_VP8 = 2,
 } RTX_CODEC;
-
-typedef struct {
-    UINT16 seqNum;
-    UINT16 packetSize;
-    UINT64 localTimeKvs;
-    UINT64 remoteTimeKvs;
-} TwccPacket, *PTwccPacket;
-
-typedef struct {
-    StackQueue twccPackets;
-    TwccPacket twccPacketBySeqNum[65536]; // twccPacketBySeqNum takes about 1.2MB of RAM but provides great cache locality
-    UINT64 lastLocalTimeKvs;
-    UINT16 lastReportedSeqNum;
-} TwccManager, *PTwccManager;
-
-typedef struct {
+/**
+ * @brief internal structure for peer connection.
+ */
+typedef struct __KvsPeerConnection {
     RtcPeerConnection peerConnection;
-    // UINT32 padding padding makes transportWideSequenceNumber 64bit aligned
-    // we put atomics at the top of structs because customers application could set the packing to 0
-    // in which case any atomic operations would result in bus errors if there is a misalignment
-    // for more see https://github.com/awslabs/amazon-kinesis-video-streams-webrtc-sdk-c/pull/987#discussion_r534432907
-    UINT32 padding;
-    volatile SIZE_T transportWideSequenceNumber;
-
     PIceAgent pIceAgent;
-    PDtlsSession pDtlsSession;
-    BOOL dtlsIsServer;
-
-    MUTEX pSrtpSessionLock;
+    PDtlsSession pDtlsSession; //!< The context of the dtls session. It will be initialized when the ice agent is ready.
+    BOOL dtlsIsServer;         //!< indicate the role of dtls session.
+#ifdef ENABLE_STREAMING
+    MUTEX pSrtpSessionLock; //!< the lock for srtp session.
     PSrtpSession pSrtpSession;
-
+#endif
+#ifdef ENABLE_DATA_CHANNEL
     PSctpSession pSctpSession;
-
-    SessionDescription remoteSessionDescription;
-    PDoubleList pTransceivers;
-    BOOL sctpIsEnabled;
+#endif
+    SessionDescription remoteSessionDescription; //!< the session desciption of the remote peer.
+    PDoubleList pTransceivers;                   //!< the transceivers.
+    BOOL sctpIsEnabled;                          //!< enable the data channel or not. indicate that support sctp or not.
 
     CHAR localIceUfrag[LOCAL_ICE_UFRAG_LEN + 1];
     CHAR localIcePwd[LOCAL_ICE_PWD_LEN + 1];
@@ -91,13 +99,13 @@ typedef struct {
 
     MUTEX peerConnectionObjLock;
 
-    BOOL isOffer;
+    BOOL isOffer; //!< the one creates the offer.
 
     TIMER_QUEUE_HANDLE timerQueueHandle;
 
     // Codecs that we support and their payloadTypes
-    // When offering we generate values starting from 96
-    // When answering this is populated from the remote offer
+    // When offering, we generate values starting from 96
+    // When answering, this is populated from the remote offer
     PHashTable pCodecTable;
 
     // Payload types that we use to retransmit data
@@ -108,46 +116,60 @@ typedef struct {
     PHashTable pDataChannels;
 
     UINT64 onDataChannelCustomData;
+#ifdef ENABLE_DATA_CHANNEL
     RtcOnDataChannel onDataChannel;
-
+#endif
     UINT64 onIceCandidateCustomData;
     RtcOnIceCandidate onIceCandidate;
 
     UINT64 onConnectionStateChangeCustomData;
-    RtcOnConnectionStateChange onConnectionStateChange;
+    RtcOnConnectionStateChange onConnectionStateChange; //!< the callback of peer connection change.
     RTC_PEER_CONNECTION_STATE connectionState;
 
     UINT16 MTU;
 
-    NullableBool canTrickleIce;
-
-    // congestion control
-    // https://tools.ietf.org/html/draft-holmer-rmcat-transport-wide-cc-extensions-01
-    UINT16 twccExtId;
-    MUTEX twccLock;
-    PTwccManager pTwccManager;
-    RtcOnSenderBandwidthEstimation onSenderBandwidthEstimation;
-    UINT64 onSenderBandwidthEstimationCustomData;
+    NullableBool canTrickleIce; //!< indicate the behavior of ice, trickle ice or non-trickle ice.
+                                ///!< https://tools.ietf.org/html/rfc8838
 } KvsPeerConnection, *PKvsPeerConnection;
 
+#ifdef ENABLE_DATA_CHANNEL
 typedef struct {
     UINT32 currentDataChannelId;
     PKvsPeerConnection pKvsPeerConnection;
     PHashTable unkeyedDataChannels;
 } AllocateSctpSortDataChannelsData, *PAllocateSctpSortDataChannelsData;
+#endif
 
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 STATUS onFrameReadyFunc(UINT64, UINT16, UINT16, UINT32);
 STATUS onFrameDroppedFunc(UINT64, UINT16, UINT16, UINT32);
+/**
+ * @brief the callback for dtls socket layer.
+ *
+ * @param[in] customData the user context.
+ * @param[in] pPacket the address of packet.
+ * @param[in] packetLen the length of packet.
+ *
+ * @return STATUS status of execution
+ */
 VOID onSctpSessionOutboundPacket(UINT64, PBYTE, UINT32);
 VOID onSctpSessionDataChannelMessage(UINT64, UINT32, BOOL, PBYTE, UINT32);
 VOID onSctpSessionDataChannelOpen(UINT64, UINT32, PBYTE, UINT32);
-
+/**
+ * @brief send packets to the corresponding rtp receiver.
+ *
+ * @param[in] pKvsPeerConnection the user context.
+ * @param[in] pBuffer the address of packet.
+ * @param[in] bufferLen the length of packet.
+ *
+ * @return STATUS status of execution
+ */
 STATUS sendPacketToRtpReceiver(PKvsPeerConnection, PBYTE, UINT32);
 STATUS changePeerConnectionState(PKvsPeerConnection, RTC_PEER_CONNECTION_STATE);
-STATUS twccManagerOnPacketSent(PKvsPeerConnection, PRtpPacket);
 
-// visible for testing only
-VOID onIceConnectionStateChange(UINT64, UINT64);
+STATUS generateJSONSafeString(PCHAR, UINT32);
 
 #ifdef __cplusplus
 }

@@ -1,6 +1,31 @@
-#define LOG_CLASS "SRTP"
-#include "../Include_i.h"
+/*
+ * Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
 
+#ifdef ENABLE_STREAMING
+/******************************************************************************
+ * HEADERS
+ ******************************************************************************/
+#define LOG_CLASS "SRTP"
+#include "SrtpSession.h"
+
+/******************************************************************************
+ * DEFINITIONS
+ ******************************************************************************/
+/******************************************************************************
+ * FUNCTIONS
+ ******************************************************************************/
 STATUS initSrtpSession(PBYTE receiveKey, PBYTE transmitKey, KVS_SRTP_PROFILE profile, PSrtpSession* ppSrtpSession)
 {
     ENTERS();
@@ -30,7 +55,7 @@ STATUS initSrtpSession(PBYTE receiveKey, PBYTE transmitKey, KVS_SRTP_PROFILE pro
             srtcp_policy_setter = srtp_crypto_policy_set_rtp_default;
             break;
         default:
-            CHK(FALSE, STATUS_SSL_UNKNOWN_SRTP_PROFILE);
+            CHK(FALSE, STATUS_DTLS_UNKNOWN_SRTP_PROFILE);
     }
 
     srtp_policy_setter(&receivePolicy.rtp);
@@ -114,7 +139,7 @@ STATUS decryptSrtcpPacket(PSrtpSession pSrtpSession, PVOID encryptedMessage, PIN
     srtp_err_status_t errStatus;
 
     CHK_ERR((errStatus = srtp_unprotect_rtcp(pSrtpSession->srtp_receive_session, encryptedMessage, len)) == srtp_err_status_ok,
-            STATUS_SRTP_DECRYPT_FAILED, "Decrypting rtcp packet failed with error code %u on srtp session %" PRIu64, errStatus,
+            STATUS_SRTCP_DECRYPT_FAILED, "Decrypting rtcp packet failed with error code %u on srtp session %" PRIu64, errStatus,
             pSrtpSession->srtp_receive_session);
 
 CleanUp:
@@ -153,3 +178,4 @@ CleanUp:
     LEAVES();
     return retStatus;
 }
+#endif

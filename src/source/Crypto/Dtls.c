@@ -1,11 +1,12 @@
 #define LOG_CLASS "DTLS"
-#include "../Include_i.h"
+
+#include "Dtls.h"
 
 STATUS dtlsSessionOnOutBoundData(PDtlsSession pDtlsSession, UINT64 customData, DtlsSessionOutboundPacketFunc callbackFn)
 {
     STATUS retStatus = STATUS_SUCCESS;
 
-    CHK(pDtlsSession != NULL && callbackFn != NULL, STATUS_NULL_ARG);
+    CHK(pDtlsSession != NULL && callbackFn != NULL, STATUS_DTLS_NULL_ARG);
 
     MUTEX_LOCK(pDtlsSession->sslLock);
     pDtlsSession->dtlsSessionCallbacks.outboundPacketFn = callbackFn;
@@ -21,7 +22,7 @@ STATUS dtlsSessionOnStateChange(PDtlsSession pDtlsSession, UINT64 customData, Dt
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
 
-    CHK(pDtlsSession != NULL && callbackFn != NULL, STATUS_NULL_ARG);
+    CHK(pDtlsSession != NULL && callbackFn != NULL, STATUS_DTLS_NULL_ARG);
 
     MUTEX_LOCK(pDtlsSession->sslLock);
     pDtlsSession->dtlsSessionCallbacks.stateChangeFn = callbackFn;
@@ -39,13 +40,13 @@ STATUS dtlsValidateRtcCertificates(PRtcCertificate pRtcCertificates, PUINT32 pCo
     STATUS retStatus = STATUS_SUCCESS;
     UINT32 i = 0;
 
-    CHK(pCount != NULL, STATUS_NULL_ARG);
+    CHK(pCount != NULL, STATUS_DTLS_NULL_ARG);
 
     // No certs have been specified
     CHK(pRtcCertificates != NULL, retStatus);
 
     for (i = 0, *pCount = 0; pRtcCertificates[i].pCertificate != NULL && i < MAX_RTCCONFIGURATION_CERTIFICATES; i++) {
-        CHK(pRtcCertificates[i].privateKeySize == 0 || pRtcCertificates[i].pPrivateKey != NULL, STATUS_SSL_INVALID_CERTIFICATE_BITS);
+        CHK(pRtcCertificates[i].privateKeySize == 0 || pRtcCertificates[i].pPrivateKey != NULL, STATUS_DTLS_INVALID_CERTIFICATE_BITS);
     }
 
 CleanUp:
@@ -64,7 +65,7 @@ STATUS dtlsSessionChangeState(PDtlsSession pDtlsSession, RTC_DTLS_TRANSPORT_STAT
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
 
-    CHK(pDtlsSession != NULL, STATUS_NULL_ARG);
+    CHK(pDtlsSession != NULL, STATUS_DTLS_NULL_ARG);
     CHK(pDtlsSession->state != newState, retStatus);
 
     if (pDtlsSession->state == RTC_DTLS_TRANSPORT_STATE_CONNECTING && newState == RTC_DTLS_TRANSPORT_STATE_CONNECTED) {
@@ -74,25 +75,6 @@ STATUS dtlsSessionChangeState(PDtlsSession pDtlsSession, RTC_DTLS_TRANSPORT_STAT
     pDtlsSession->state = newState;
     if (pDtlsSession->dtlsSessionCallbacks.stateChangeFn != NULL) {
         pDtlsSession->dtlsSessionCallbacks.stateChangeFn(pDtlsSession->dtlsSessionCallbacks.stateChangeFnCustomData, newState);
-    }
-
-CleanUp:
-
-    LEAVES();
-    return retStatus;
-}
-
-STATUS dtlsFillPseudoRandomBits(PBYTE pBuf, UINT32 bufSize)
-{
-    ENTERS();
-    STATUS retStatus = STATUS_SUCCESS;
-    UINT32 i;
-
-    CHK(pBuf != NULL, STATUS_NULL_ARG);
-    CHK(bufSize >= DTLS_CERT_MIN_SERIAL_NUM_SIZE && bufSize <= DTLS_CERT_MAX_SERIAL_NUM_SIZE, retStatus);
-
-    for (i = 0; i < bufSize; i++) {
-        *pBuf++ = (BYTE) (RAND() & 0xFF);
     }
 
 CleanUp:
