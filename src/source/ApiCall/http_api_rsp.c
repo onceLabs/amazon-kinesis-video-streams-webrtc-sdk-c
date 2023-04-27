@@ -165,6 +165,7 @@ STATUS http_api_rsp_getChannelEndpoint(const CHAR* pResponseStr, UINT32 resultLe
 
     pSignalingClient->channelDescription.channelEndpointWss[0] = '\0';
     pSignalingClient->channelDescription.channelEndpointHttps[0] = '\0';
+    pSignalingClient->channelDescription.channelEndpointWebrtc[0] = '\0';
 
     // Loop through the pTokens and extract the stream description
     for (i = 1; i < tokenCount; i++) {
@@ -188,6 +189,10 @@ STATUS http_api_rsp_getChannelEndpoint(const CHAR* pResponseStr, UINT32 resultLe
                             STRNCPY(pSignalingClient->channelDescription.channelEndpointHttps, pEndpoint,
                                     MIN(endpointLen, MAX_SIGNALING_ENDPOINT_URI_LEN));
                             pSignalingClient->channelDescription.channelEndpointHttps[MAX_SIGNALING_ENDPOINT_URI_LEN] = '\0';
+                        } else if (0 == STRNCMPI(pProtocol, WEBRTC_SCHEME_NAME, protocolLen)) {
+                            STRNCPY(pSignalingClient->channelDescription.channelEndpointWebrtc, pEndpoint,
+                                    MIN(endpointLen, MAX_SIGNALING_ENDPOINT_URI_LEN));
+                            pSignalingClient->channelDescription.channelEndpointWebrtc[MAX_SIGNALING_ENDPOINT_URI_LEN] = '\0';
                         }
                     }
 
@@ -223,6 +228,9 @@ STATUS http_api_rsp_getChannelEndpoint(const CHAR* pResponseStr, UINT32 resultLe
         } else if (0 == STRNCMPI(pProtocol, HTTPS_SCHEME_NAME, protocolLen)) {
             STRNCPY(pSignalingClient->channelDescription.channelEndpointHttps, pEndpoint, MIN(endpointLen, MAX_SIGNALING_ENDPOINT_URI_LEN));
             pSignalingClient->channelDescription.channelEndpointHttps[MAX_SIGNALING_ENDPOINT_URI_LEN] = '\0';
+        } else if (0 == STRNCMPI(pProtocol, WEBRTC_SCHEME_NAME, protocolLen)) {
+            STRNCPY(pSignalingClient->channelDescription.channelEndpointWebrtc, pEndpoint, MIN(endpointLen, MAX_SIGNALING_ENDPOINT_URI_LEN));
+            pSignalingClient->channelDescription.channelEndpointWebrtc[MAX_SIGNALING_ENDPOINT_URI_LEN] = '\0';
         }
     }
 
@@ -386,6 +394,62 @@ STATUS http_api_rsp_getIoTCredential(PIotCredentialProvider pIotCredentialProvid
 
 CleanUp:
 
+    SAFE_MEMFREE(pTokens);
+    HTTP_RSP_EXIT();
+    return retStatus;
+}
+
+STATUS http_api_rsp_describeMediaStorageConf(const CHAR* pResponseStr, UINT32 resultLen, PSignalingClient pSignalingClient)
+{
+    HTTP_RSP_ENTER();
+    STATUS retStatus = STATUS_SUCCESS;
+    jsmn_parser parser;
+    jsmntok_t* pTokens = NULL;
+    UINT32 tokenCount, i, strLen;
+    BOOL jsonInMediaStorageConfig = FALSE;
+
+    CHK(NULL != (pTokens = (jsmntok_t*) MEMALLOC(MAX_JSON_TOKEN_COUNT * SIZEOF(jsmntok_t))), STATUS_NOT_ENOUGH_MEMORY);
+
+    // Parse and extract the endpoints
+    jsmn_init(&parser);
+    tokenCount = jsmn_parse(&parser, pResponseStr, resultLen, pTokens, MAX_JSON_TOKEN_COUNT);
+    CHK(tokenCount > 1, STATUS_JSON_API_CALL_INVALID_RETURN);
+    CHK(pTokens[0].type == JSMN_OBJECT, STATUS_JSON_API_CALL_INVALID_RETURN);
+
+    // Loop through the tokens and extract the stream description
+    for (i = 1; i < tokenCount; i++) {
+        if (!jsonInMediaStorageConfig) {
+            if (compareJsonString(pResponseStr, &pTokens[i], JSMN_STRING, (PCHAR) "MediaStorageConfiguration")) {
+                jsonInMediaStorageConfig = TRUE;
+                i++;
+            }
+        } else {
+            if (compareJsonString(pResponseStr, &pTokens[i], JSMN_STRING, (PCHAR) "Status")) {
+                strLen = (UINT32) (pTokens[i + 1].end - pTokens[i + 1].start);
+                CHK(strLen <= MAX_ARN_LEN, STATUS_JSON_API_CALL_INVALID_RETURN);
+                if (STRNCMP("ENABLED", pResponseStr + pTokens[i + 1].start, strLen) == 0) {
+                    pSignalingClient->mediaStorageConfig.storageStatus = TRUE;
+                } else {
+                    pSignalingClient->mediaStorageConfig.storageStatus = FALSE;
+                }
+                i++;
+            } else if (compareJsonString(pResponseStr, &pTokens[i], JSMN_STRING, (PCHAR) "StreamARN")) {
+                // StorageStream may be null.
+                if (pTokens[i + 1].type != JSMN_PRIMITIVE) {
+                    strLen = (UINT32) (pTokens[i + 1].end - pTokens[i + 1].start);
+                    CHK(strLen <= MAX_ARN_LEN, STATUS_JSON_API_CALL_INVALID_RETURN);
+                    STRNCPY(pSignalingClient->mediaStorageConfig.storageStreamArn, pResponseStr + pTokens[i + 1].start, strLen);
+                    pSignalingClient->mediaStorageConfig.storageStreamArn[MAX_ARN_LEN] = '\0';
+                }
+                i++;
+            }
+        }
+    }
+
+    // Perform some validation on the channel description
+    CHK(pSignalingClient->channelDescription.channelStatus != SIGNALING_CHANNEL_STATUS_DELETING, STATUS_SIGNALING_CHANNEL_BEING_DELETED);
+
+CleanUp:
     SAFE_MEMFREE(pTokens);
     HTTP_RSP_EXIT();
     return retStatus;

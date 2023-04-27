@@ -211,6 +211,7 @@ extern "C" {
 // Protocol scheme names
 #define HTTPS_SCHEME_NAME "https"
 #define WSS_SCHEME_NAME   "wss"
+#define WEBRTC_SCHEME_NAME "webrtc"
 
 // Max header name length in chars
 #define MAX_REQUEST_HEADER_NAME_LEN 128

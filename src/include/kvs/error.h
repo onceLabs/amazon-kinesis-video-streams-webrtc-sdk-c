@@ -444,6 +444,7 @@ extern "C" {
 #define STATUS_SIGNALING_NO_DISPATCHER                             STATUS_SIGNALING_BASE + 0x00000048
 #define STATUS_SIGNALING_NO_INBOUND_MSGQ                           STATUS_SIGNALING_BASE + 0x00000049
 #define STATUS_SIGNALING_INBOUND_MSGQ_OVERFLOW                     STATUS_SIGNALING_BASE + 0x0000004A
+#define STATUS_SIGNALING_MEDIA_STORAGE_DISABLED                    STATUS_SIGNALING_BASE + 0x0000004B
 /******************************************************************************
  * Peer connection error codes
  ******************************************************************************/

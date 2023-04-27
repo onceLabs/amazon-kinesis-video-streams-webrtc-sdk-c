@@ -2581,8 +2581,9 @@ STATUS handleStunPacket(PIceAgent pIceAgent, PBYTE pBuffer, UINT32 bufferLen, PS
             if (!pIceCandidatePair->nominated) {
                 CHK_STATUS(getStunAttribute(pStunPacket, STUN_ATTRIBUTE_TYPE_USE_CANDIDATE, &pStunAttr));
                 if (pStunAttr != NULL) {
-                    DLOGD("received candidate with USE_CANDIDATE flag, local candidate type %s.",
-                          iceAgentGetCandidateTypeStr(pIceCandidatePair->local->iceCandidateType));
+                    DLOGD("received candidate with USE_CANDIDATE flag, local candidate type %s(%s:%s).",
+                          iceAgentGetCandidateTypeStr(pIceCandidatePair->local->iceCandidateType), pIceCandidatePair->local->id,
+                          pIceCandidatePair->remote->id);
                     pIceCandidatePair->nominated = TRUE;
                 }
             }

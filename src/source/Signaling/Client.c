@@ -111,6 +111,22 @@ CleanUp:
     return retStatus;
 }
 
+STATUS signalingClientJoinSessionSync(SIGNALING_CLIENT_HANDLE signalingClientHandle)
+{
+    ENTERS();
+    STATUS retStatus = STATUS_SUCCESS;
+    PSignalingClient pSignalingClient = FROM_SIGNALING_CLIENT_HANDLE(signalingClientHandle);
+
+    DLOGV("Signaling Client Join Session Sync");
+    CHK_STATUS(signalingJoinSessionSync(pSignalingClient));
+
+CleanUp:
+
+    SIGNALING_UPDATE_ERROR_COUNT(pSignalingClient, retStatus);
+    LEAVES();
+    return retStatus;
+}
+
 STATUS signalingClientDisconnectSync(SIGNALING_CLIENT_HANDLE signalingClientHandle)
 {
     ENTERS();
@@ -258,7 +274,12 @@ STATUS signalingClientGetStateString(SIGNALING_CLIENT_STATE state, PCHAR* ppStat
         case SIGNALING_CLIENT_STATE_DELETED:
             *ppStateStr = SIGNALING_CLIENT_STATE_DELETED_STR;
             break;
-
+        case SIGNALING_CLIENT_STATE_DESCRIBE_MEDIA:
+            *ppStateStr = SIGNALING_CLIENT_STATE_DESCRIBE_MEDIA_STR;
+            break;
+        case SIGNALING_CLIENT_STATE_JOIN_SESSION:
+            *ppStateStr = SIGNALING_CLIENT_STATE_JOIN_SESSION_STR;
+            break;
         case SIGNALING_CLIENT_STATE_MAX_VALUE:
         case SIGNALING_CLIENT_STATE_UNKNOWN:
             // Explicit fall-through

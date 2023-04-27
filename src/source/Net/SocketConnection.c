@@ -398,7 +398,7 @@ STATUS socketSendDataWithRetry(PSocketConnection pSocketConnection, PBYTE buf, U
     }
     // start sending the data.
     while (socketWriteAttempt < MAX_SOCKET_WRITE_RETRY && bytesWritten < bufLen) {
-        socketResult = sendto(pSocketConnection->localSocket, buf, bufLen, NO_SIGNAL, destAddr, addrLen);
+        socketResult = sendto(pSocketConnection->localSocket, buf, bufLen, NO_SIGNAL_SEND, destAddr, addrLen);
         if (socketResult < 0) {
             errorNum = getErrorCode();
             if (errorNum == EAGAIN || errorNum == EWOULDBLOCK) {

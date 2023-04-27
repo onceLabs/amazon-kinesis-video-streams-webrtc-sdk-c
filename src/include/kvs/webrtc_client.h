@@ -546,9 +546,11 @@ typedef enum {
     SIGNALING_CLIENT_STATE_CONNECTED,       //!< On transitioning to this state, the timeout on the state machine is reset
     SIGNALING_CLIENT_STATE_DISCONNECTED,    //!< This state transition happens either from connect or connected state
     SIGNALING_CLIENT_STATE_DELETE,          //!< This state transition happens when the application calls signalingClientDeleteSync API.
-    SIGNALING_CLIENT_STATE_DELETED,   //!< This state transition happens after the channel gets deleted as a result of a signalingClientDeleteSync API.
-                                      //!< This is a terminal state.
-    SIGNALING_CLIENT_STATE_MAX_VALUE, //!< This state indicates maximum number of signaling client states
+    SIGNALING_CLIENT_STATE_DELETED,         //!< This state transition happens after the channel gets deleted as a result of a signalingClientDeleteSync API.
+    SIGNALING_CLIENT_STATE_DESCRIBE_MEDIA,
+    SIGNALING_CLIENT_STATE_JOIN_SESSION,
+                                            //!< This is a terminal state.
+    SIGNALING_CLIENT_STATE_MAX_VALUE,       //!< This state indicates maximum number of signaling client states
 } SIGNALING_CLIENT_STATE,
     *PSIGNALING_CLIENT_STATE;
 
@@ -929,6 +931,8 @@ typedef struct {
     // #http_api_describeChannel
     PCHAR pChannelArn; //!< Channel Amazon Resource Name (ARN). This is an optional parameter
                        //!< Maximum length is defined by MAX_ARN_LEN+1
+    PCHAR pStorageStreamArn; //!< Storage Stream Amazon Resource Name (ARN). This is an optional parameter
+                             //!< Maximum length is defined by MAX_ARN_LEN+1
 
     PCHAR pRegion; //!< AWS Region in which the channel is to be opened. Can be empty for default
                    //!< Maximum length is defined by MAX_REGION_NAME_LEN+1
@@ -988,6 +992,8 @@ typedef struct {
 
     SIGNALING_API_CALL_CACHE_TYPE cachingPolicy; //!< Backend API call caching policy
 
+    BOOL useMediaStorage; //!< use the feature of media storage.
+
 } ChannelInfo, *PChannelInfo;
 
 /**
@@ -1007,6 +1013,11 @@ typedef struct {
     CHAR userName[MAX_ICE_CONFIG_USER_NAME_LEN + 1];                 //!< Username for the server
     CHAR password[MAX_ICE_CONFIG_CREDENTIAL_LEN + 1];                //!< Password for the server
 } IceConfigInfo, *PIceConfigInfo;
+
+typedef struct {
+    BOOL storageStatus;                     //!< Indicate the association between channelArn and storageStreamArn
+    CHAR storageStreamArn[MAX_ARN_LEN + 1]; //!< The arn of kvs stream, optional if you already associate signaling channel with stream
+} MediaStorageConfig, *PMediaStorageConfig;
 /*!@} */
 
 /*! \addtogroup Callbacks
@@ -1638,6 +1649,15 @@ PUBLIC_API STATUS signalingClientGetIceConfigInfo(SIGNALING_CLIENT_HANDLE, UINT3
  * @return STATUS code of the execution. STATUS_SUCCESS on success
  */
 PUBLIC_API STATUS signalingClientConnectSync(SIGNALING_CLIENT_HANDLE);
+
+/**
+ * @brief Trigger the storage session.
+ *
+ * @param[in] SIGNALING_CLIENT_HANDLE Signaling client handle
+ *
+ * @return STATUS code of execution. STATUS_SUCCESS on success
+ */
+PUBLIC_API STATUS signalingClientJoinSessionSync(SIGNALING_CLIENT_HANDLE);
 
 /**
  * @brief Disconnects the signaling client.

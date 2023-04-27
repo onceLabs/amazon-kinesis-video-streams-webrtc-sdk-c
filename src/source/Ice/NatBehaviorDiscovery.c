@@ -26,7 +26,7 @@ STATUS natTestIncomingDataHandler(UINT64 customData, PSocketConnection pSocketCo
 
 CleanUp:
 
-    return STATUS_SUCCESS;
+    return retStatus;
 }
 
 /*

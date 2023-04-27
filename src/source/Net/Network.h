@@ -38,9 +38,10 @@ extern "C" {
 #define KVS_GET_IP_ADDRESS_PORT(a) ((UINT16) getInt16((a)->port))
 
 #if defined(__MACH__)
-#define NO_SIGNAL SO_NOSIGPIPE
+#define NO_SIGNAL_SOCK_OPT SO_NOSIGPIPE
+#define NO_SIGNAL_SEND     0
 #else
-#define NO_SIGNAL MSG_NOSIGNAL
+#define NO_SIGNAL_SEND MSG_NOSIGNAL
 #endif
 
 // Some systems such as Windows doesn't have this value

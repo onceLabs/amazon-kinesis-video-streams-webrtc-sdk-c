@@ -24,22 +24,23 @@
  ******************************************************************************/
 #define SIGNALING_STATE_NEW_REQUIRED (SIGNALING_STATE_NONE | SIGNALING_STATE_NEW)
 #define SIGNALING_STATE_GET_TOKEN_REQUIRED                                                                                                           \
-    (SIGNALING_STATE_NEW | SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_CREATE | SIGNALING_STATE_GET_ENDPOINT | SIGNALING_STATE_GET_ICE_CONFIG |       \
+    (SIGNALING_STATE_NEW | SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_DESCRIBE_MEDIA | SIGNALING_STATE_CREATE | SIGNALING_STATE_GET_ENDPOINT | SIGNALING_STATE_GET_ICE_CONFIG |       \
      SIGNALING_STATE_READY | SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_GET_TOKEN)
 #define SIGNALING_STATE_DESCRIBE_REQUIRED                                                                                                            \
     (SIGNALING_STATE_GET_TOKEN | SIGNALING_STATE_CREATE | SIGNALING_STATE_GET_ENDPOINT | SIGNALING_STATE_GET_ICE_CONFIG | SIGNALING_STATE_CONNECT |  \
-     SIGNALING_STATE_CONNECTED | SIGNALING_STATE_DESCRIBE)
-#define SIGNALING_STATE_CREATE_REQUIRED (SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_CREATE)
+     SIGNALING_STATE_CONNECTED | SIGNALING_STATE_JOIN_SESSION | SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_READY |  \
+   SIGNALING_STATE_DISCONNECTED)
+#define SIGNALING_STATE_CREATE_REQUIRED (SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_DESCRIBE_MEDIA | SIGNALING_STATE_CREATE)
 #define SIGNALING_STATE_GET_ENDPOINT_REQUIRED                                                                                                        \
-    (SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_CREATE | SIGNALING_STATE_GET_TOKEN | SIGNALING_STATE_READY | SIGNALING_STATE_CONNECT |               \
-     SIGNALING_STATE_CONNECTED | SIGNALING_STATE_GET_ENDPOINT)
+    (SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_DESCRIBE_MEDIA | SIGNALING_STATE_CREATE | SIGNALING_STATE_GET_TOKEN | SIGNALING_STATE_READY | SIGNALING_STATE_CONNECT |               \
+     SIGNALING_STATE_CONNECTED | SIGNALING_STATE_JOIN_SESSION | SIGNALING_STATE_GET_ENDPOINT)
 #define SIGNALING_STATE_GET_ICE_CONFIG_REQUIRED                                                                                                      \
-    (SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_GET_ENDPOINT | SIGNALING_STATE_READY |         \
+    (SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_DESCRIBE_MEDIA | SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_JOIN_SESSION | SIGNALING_STATE_GET_ENDPOINT | SIGNALING_STATE_READY |         \
      SIGNALING_STATE_GET_ICE_CONFIG)
 #define SIGNALING_STATE_READY_REQUIRED        (SIGNALING_STATE_GET_ICE_CONFIG | SIGNALING_STATE_DISCONNECTED | SIGNALING_STATE_READY)
-#define SIGNALING_STATE_CONNECT_REQUIRED      (SIGNALING_STATE_READY | SIGNALING_STATE_DISCONNECTED | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_CONNECT)
-#define SIGNALING_STATE_CONNECTED_REQUIRED    (SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED)
-#define SIGNALING_STATE_DISCONNECTED_REQUIRED (SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED)
+#define SIGNALING_STATE_CONNECT_REQUIRED      (SIGNALING_STATE_READY | SIGNALING_STATE_DISCONNECTED | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_JOIN_SESSION | SIGNALING_STATE_CONNECT)
+#define SIGNALING_STATE_CONNECTED_REQUIRED    (SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_JOIN_SESSION)
+#define SIGNALING_STATE_DISCONNECTED_REQUIRED (SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_JOIN_SESSION)
 
 /******************************************************************************
  * INTERNAL FUNCTION PROTOTYPE
@@ -64,13 +65,17 @@ STATUS fromConnectedSignalingState(UINT64, PUINT64);
 STATUS executeConnectedSignalingState(UINT64, UINT64);
 STATUS fromDisconnectedSignalingState(UINT64, PUINT64);
 STATUS executeDisconnectedSignalingState(UINT64, UINT64);
+STATUS fromDescribeMediaStorageConfState(UINT64, PUINT64);
+STATUS executeDescribeMediaStorageConfState(UINT64, UINT64);
+STATUS fromJoinStorageSessionState(UINT64, PUINT64);
+STATUS executeJoinStorageSessionState(UINT64, UINT64);
 /**
  * Static definitions of the states
  */
 static StateMachineState SIGNALING_STATE_MACHINE_STATES[] = {
     // http connection.
-    {SIGNALING_STATE_NEW, SIGNALING_STATE_NEW_REQUIRED, fromNewSignalingState, executeNewSignalingState, INFINITE_RETRY_COUNT_SENTINEL,
-     STATUS_SIGNALING_INVALID_READY_STATE},
+    {SIGNALING_STATE_NEW, SIGNALING_STATE_NEW_REQUIRED, fromNewSignalingState, executeNewSignalingState,
+     INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_INVALID_READY_STATE},
     {SIGNALING_STATE_GET_TOKEN, SIGNALING_STATE_GET_TOKEN_REQUIRED, fromGetTokenSignalingState, executeGetTokenSignalingState,
      SIGNALING_STATES_DEFAULT_RETRY_COUNT, STATUS_SIGNALING_GET_TOKEN_CALL_FAILED},
     {SIGNALING_STATE_DESCRIBE, SIGNALING_STATE_DESCRIBE_REQUIRED, fromDescribeSignalingState, executeDescribeSignalingState,
@@ -81,15 +86,19 @@ static StateMachineState SIGNALING_STATE_MACHINE_STATES[] = {
      SIGNALING_STATES_DEFAULT_RETRY_COUNT, STATUS_SIGNALING_GET_ENDPOINT_CALL_FAILED},
     {SIGNALING_STATE_GET_ICE_CONFIG, SIGNALING_STATE_GET_ICE_CONFIG_REQUIRED, fromGetIceConfigSignalingState, executeGetIceConfigSignalingState,
      SIGNALING_STATES_DEFAULT_RETRY_COUNT, STATUS_SIGNALING_GET_ICE_CONFIG_CALL_FAILED},
-    {SIGNALING_STATE_READY, SIGNALING_STATE_READY_REQUIRED, fromReadySignalingState, executeReadySignalingState, INFINITE_RETRY_COUNT_SENTINEL,
-     STATUS_SIGNALING_READY_CALLBACK_FAILED},
+    {SIGNALING_STATE_READY, SIGNALING_STATE_READY_REQUIRED, fromReadySignalingState, executeReadySignalingState,
+     INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_READY_CALLBACK_FAILED},
     // websocket connection.
-    {SIGNALING_STATE_CONNECT, SIGNALING_STATE_CONNECT_REQUIRED, fromConnectSignalingState, executeConnectSignalingState, INFINITE_RETRY_COUNT_SENTINEL,
-     STATUS_SIGNALING_CONNECT_CALL_FAILED},
+    {SIGNALING_STATE_CONNECT, SIGNALING_STATE_CONNECT_REQUIRED, fromConnectSignalingState, executeConnectSignalingState,
+     INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_CONNECT_CALL_FAILED},
     {SIGNALING_STATE_CONNECTED, SIGNALING_STATE_CONNECTED_REQUIRED, fromConnectedSignalingState, executeConnectedSignalingState,
      INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_CONNECTED_CALLBACK_FAILED},
     {SIGNALING_STATE_DISCONNECTED, SIGNALING_STATE_DISCONNECTED_REQUIRED, fromDisconnectedSignalingState, executeDisconnectedSignalingState,
      SIGNALING_STATES_DEFAULT_RETRY_COUNT, STATUS_SIGNALING_DISCONNECTED_CALLBACK_FAILED},
+    {SIGNALING_STATE_JOIN_SESSION, SIGNALING_STATE_CONNECTED, fromJoinStorageSessionState, executeJoinStorageSessionState,
+     INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_CONNECTED_CALLBACK_FAILED},
+    {SIGNALING_STATE_DESCRIBE_MEDIA, SIGNALING_STATE_DESCRIBE, fromDescribeMediaStorageConfState, executeDescribeMediaStorageConfState,
+     INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_CONNECTED_CALLBACK_FAILED},
 };
 
 static UINT32 SIGNALING_STATE_MACHINE_STATE_COUNT = ARRAY_SIZE(SIGNALING_STATE_MACHINE_STATES);
@@ -161,8 +170,17 @@ STATUS fromGetTokenSignalingState(UINT64 customData, PUINT64 pState)
             STRNCPY(pSignalingClient->channelDescription.channelArn, pSignalingClient->pChannelInfo->pChannelArn, MAX_ARN_LEN);
             pSignalingClient->channelDescription.channelArn[MAX_ARN_LEN] = '\0';
 
-            // Move to get endpoint state
+            // Move to get endpoint state if the media storage is not enabled.
             state = SIGNALING_STATE_GET_ENDPOINT;
+
+            if (ATOMIC_LOAD_BOOL(&pSignalingClient->describeMediaStorageConf)) {
+                if (pSignalingClient->pChannelInfo->pStorageStreamArn == NULL || pSignalingClient->pChannelInfo->pStorageStreamArn[0] == '\0') {
+                    state = SIGNALING_STATE_DESCRIBE_MEDIA;
+                } else {
+                    STRNCPY(pSignalingClient->mediaStorageConfig.storageStreamArn, pSignalingClient->pChannelInfo->pStorageStreamArn, MAX_ARN_LEN);
+                    pSignalingClient->mediaStorageConfig.storageStreamArn[MAX_ARN_LEN] = '\0';
+                }
+            }
         } else {
             state = SIGNALING_STATE_DESCRIBE;
         }
@@ -235,7 +253,11 @@ STATUS fromDescribeSignalingState(UINT64 customData, PUINT64 pState)
     switch (result) {
         case HTTP_STATUS_OK:
             // If we are trying to delete the channel then move to delete state
-            state = SIGNALING_STATE_GET_ENDPOINT;
+            if (ATOMIC_LOAD_BOOL(&pSignalingClient->describeMediaStorageConf)) {
+                state = SIGNALING_STATE_DESCRIBE_MEDIA;
+            } else {
+                state = SIGNALING_STATE_GET_ENDPOINT;
+            }
             break;
 
         case HTTP_STATUS_NOT_FOUND:
@@ -275,6 +297,71 @@ STATUS executeDescribeSignalingState(UINT64 customData, UINT64 time)
 
     // Call the aggregate function
     retStatus = describeChannel(pSignalingClient, time);
+
+    CHK_STATUS(signaling_fsm_step(pSignalingClient, retStatus));
+    // Reset the ret status
+    retStatus = STATUS_SUCCESS;
+
+CleanUp:
+
+    LEAVES();
+    return retStatus;
+}
+
+STATUS fromDescribeMediaStorageConfState(UINT64 customData, PUINT64 pState)
+{
+    ENTERS();
+    STATUS retStatus = STATUS_SUCCESS;
+    PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
+    UINT64 state = SIGNALING_STATE_DESCRIBE;
+    SIZE_T result;
+
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+
+    result = ATOMIC_LOAD(&pSignalingClient->apiCallStatus);
+    switch (result) {
+        case HTTP_STATUS_OK:
+            state = SIGNALING_STATE_GET_ENDPOINT;
+            break;
+
+        case HTTP_STATUS_NOT_FOUND:
+            state = SIGNALING_STATE_CREATE;
+            break;
+
+        case HTTP_STATUS_FORBIDDEN:
+        case HTTP_STATUS_UNAUTHORIZED:
+            state = SIGNALING_STATE_GET_TOKEN;
+            break;
+
+        default:
+            break;
+    }
+
+    *pState = state;
+
+CleanUp:
+
+    LEAVES();
+    return retStatus;
+}
+
+STATUS executeDescribeMediaStorageConfState(UINT64 customData, UINT64 time)
+{
+    ENTERS();
+    STATUS retStatus = STATUS_SUCCESS;
+    PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
+
+    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
+    ATOMIC_STORE(&pSignalingClient->apiCallStatus, (SIZE_T) HTTP_STATUS_NONE);
+
+    // Notify of the state change
+    if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
+        CHK_STATUS(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
+                                                                            SIGNALING_CLIENT_STATE_DESCRIBE_MEDIA));
+    }
+
+    // Call the aggregate function
+    retStatus = describeMediaStorageConf(pSignalingClient, time);
 
     CHK_STATUS(signaling_fsm_step(pSignalingClient, retStatus));
 
@@ -650,6 +737,8 @@ STATUS fromConnectedSignalingState(UINT64 customData, PUINT64 pState)
         case HTTP_STATUS_OK:
             if (!ATOMIC_LOAD_BOOL(&pSignalingClient->connected)) {
                 state = SIGNALING_STATE_DISCONNECTED;
+            } else if (ATOMIC_LOAD_BOOL(&pSignalingClient->joinSession)) {
+                state = SIGNALING_STATE_JOIN_SESSION;
             }
             break;
 
@@ -707,6 +796,97 @@ STATUS executeConnectedSignalingState(UINT64 customData, UINT64 time)
     MUTEX_LOCK(pSignalingClient->nestedFsmLock);
     pSignalingClient->stepUntil = 0;
     MUTEX_UNLOCK(pSignalingClient->nestedFsmLock);
+
+CleanUp:
+
+    LEAVES();
+    return retStatus;
+}
+
+STATUS fromJoinStorageSessionState(UINT64 customData, PUINT64 pState)
+{
+    ENTERS();
+    STATUS retStatus = STATUS_SUCCESS;
+    PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
+    UINT64 state = SIGNALING_STATE_CONNECT;
+    SIZE_T result;
+    BOOL connected;
+
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+
+    result = ATOMIC_LOAD(&pSignalingClient->apiCallStatus);
+
+    switch (result) {
+        case HTTP_STATUS_OK:
+            if (!ATOMIC_LOAD_BOOL(&pSignalingClient->connected)) {
+                state = SIGNALING_STATE_DISCONNECTED;
+            } else if (!ATOMIC_LOAD_BOOL(&pSignalingClient->joinSession)) {
+                state = SIGNALING_STATE_CONNECTED;
+            }
+            break;
+
+        case HTTP_STATUS_NOT_FOUND:
+            state = SIGNALING_STATE_DESCRIBE;
+            break;
+
+        case HTTP_STATUS_FORBIDDEN:
+        case HTTP_STATUS_UNAUTHORIZED:
+            state = SIGNALING_STATE_GET_TOKEN;
+            break;
+
+        case HTTP_STATUS_INTERNAL_SERVER_ERROR:
+            state = SIGNALING_STATE_GET_ENDPOINT;
+            break;
+
+        case HTTP_STATUS_BAD_REQUEST:
+            state = SIGNALING_STATE_GET_ENDPOINT;
+            break;
+
+        case HTTP_STATUS_SIGNALING_RECONNECT_ICE:
+            state = SIGNALING_STATE_GET_ICE_CONFIG;
+            break;
+
+        case HTTP_STATUS_NETWORK_CONNECTION_TIMEOUT:
+        case HTTP_STATUS_NETWORK_READ_TIMEOUT:
+        case HTTP_STATUS_REQUEST_TIMEOUT:
+        case HTTP_STATUS_GATEWAY_TIMEOUT:
+            // Attempt to get a new endpoint
+            state = SIGNALING_STATE_GET_ENDPOINT;
+            break;
+
+        default:
+            DLOGW("unknown response code(%d).", result);
+            state = SIGNALING_STATE_GET_TOKEN;
+            break;
+    }
+
+    // Overwrite the state if we are force refreshing
+    state = ATOMIC_EXCHANGE_BOOL(&pSignalingClient->refreshIceConfig, FALSE) ? SIGNALING_STATE_GET_ICE_CONFIG : state;
+
+    *pState = state;
+
+CleanUp:
+
+    LEAVES();
+    return retStatus;
+}
+
+STATUS executeJoinStorageSessionState(UINT64 customData, UINT64 time)
+{
+    ENTERS();
+    STATUS retStatus = STATUS_SUCCESS;
+    PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
+
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
+
+    // Notify of the state change
+    if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
+        CHK(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
+                                                                     SIGNALING_CLIENT_STATE_JOIN_SESSION) == STATUS_SUCCESS,
+            STATUS_SIGNALING_FSM_STATE_CHANGE_FAILED);
+    }
+
+    retStatus = joinStorageSession(pSignalingClient, time);
 
 CleanUp:
 

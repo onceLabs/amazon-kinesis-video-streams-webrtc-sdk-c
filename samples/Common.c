@@ -564,7 +564,7 @@ STATUS freeSampleStreamingSession(PSampleStreamingSession* ppSampleStreamingSess
     // the running thread but it's OK as it's re-entrant
     MUTEX_LOCK(pSampleConfiguration->sampleConfigurationObjLock);
     if (pSampleConfiguration->iceCandidatePairStatsTimerId != MAX_UINT32 && pSampleConfiguration->streamingSessionCount == 0 &&
-        pSampleConfiguration->iceCandidatePairStatsTimerId != MAX_UINT32 && IS_VALID_TIMER_QUEUE_HANDLE(pSampleConfiguration->timerQueueHandle)) {
+        IS_VALID_TIMER_QUEUE_HANDLE(pSampleConfiguration->timerQueueHandle)) {
         CHK_LOG_ERR(timerQueueCancelTimer(pSampleConfiguration->timerQueueHandle, pSampleConfiguration->iceCandidatePairStatsTimerId,
                                           (UINT64) pSampleConfiguration));
         pSampleConfiguration->iceCandidatePairStatsTimerId = MAX_UINT32;
@@ -710,7 +710,7 @@ CleanUp:
     return retStatus;
 }
 
-STATUS createSampleConfiguration(PCHAR channelName, SIGNALING_CHANNEL_ROLE_TYPE roleType, BOOL trickleIce, BOOL useTurn,
+STATUS createSampleConfiguration(PCHAR channelName, SIGNALING_CHANNEL_ROLE_TYPE roleType, BOOL trickleIce, BOOL useTurn, BOOL useMediaStorage,
                                  PSampleConfiguration* ppSampleConfiguration)
 {
     STATUS retStatus = STATUS_SUCCESS;
@@ -741,6 +741,9 @@ STATUS createSampleConfiguration(PCHAR channelName, SIGNALING_CHANNEL_ROLE_TYPE 
     }
     if ((pSampleConfiguration->channelInfo.pRegion = getenv(DEFAULT_REGION_ENV_VAR)) == NULL) {
         pSampleConfiguration->channelInfo.pRegion = DEFAULT_AWS_REGION;
+    }
+    if (NULL != getenv(STORAGE_STREAM_ARN)) {
+        pSampleConfiguration->channelInfo.pStorageStreamArn = getenv(STORAGE_STREAM_ARN);
     }
 
     CHK_STATUS(lookForSslCert(&pSampleConfiguration));
@@ -786,6 +789,7 @@ STATUS createSampleConfiguration(PCHAR channelName, SIGNALING_CHANNEL_ROLE_TYPE 
     pSampleConfiguration->channelInfo.reconnect = TRUE;
     pSampleConfiguration->channelInfo.pCertPath = pSampleConfiguration->pCaCertPath;
     pSampleConfiguration->channelInfo.messageTtl = 0; // Default is 60 seconds
+    pSampleConfiguration->channelInfo.useMediaStorage = useMediaStorage;
 
     pSampleConfiguration->signalingClientCallbacks.version = SIGNALING_CLIENT_CALLBACKS_CURRENT_VERSION;
     pSampleConfiguration->signalingClientCallbacks.errorReportFn = signalingClientError;
@@ -798,6 +802,7 @@ STATUS createSampleConfiguration(PCHAR channelName, SIGNALING_CHANNEL_ROLE_TYPE 
     pSampleConfiguration->clientInfo.signalingClientCreationMaxRetryAttempts = CREATE_SIGNALING_CLIENT_RETRY_ATTEMPTS_SENTINEL_VALUE;
     pSampleConfiguration->iceCandidatePairStatsTimerId = MAX_UINT32;
     pSampleConfiguration->pregenerateCertTimerId = MAX_UINT32;
+    pSampleConfiguration->joinSessionTimerId = MAX_UINT32;
 
     ATOMIC_STORE_BOOL(&pSampleConfiguration->interrupted, FALSE);
     ATOMIC_STORE_BOOL(&pSampleConfiguration->mediaThreadStarted, FALSE);
@@ -1036,6 +1041,15 @@ STATUS freeSampleConfiguration(PSampleConfiguration* ppSampleConfiguration)
                 DLOGE("Failed to cancel certificate pre-generation timer with: 0x%08x", retStatus);
             }
             pSampleConfiguration->pregenerateCertTimerId = MAX_UINT32;
+        }
+
+        if (pSampleConfiguration->joinSessionTimerId != MAX_UINT32) {
+            retStatus = timerQueueCancelTimer(pSampleConfiguration->timerQueueHandle, pSampleConfiguration->joinSessionTimerId,
+                                              (UINT64) pSampleConfiguration);
+            if (STATUS_FAILED(retStatus)) {
+                DLOGE("Failed to cancel join session timer with: 0x%08x", retStatus);
+            }
+            pSampleConfiguration->joinSessionTimerId = MAX_UINT32;
         }
 
         timerQueueFree(&pSampleConfiguration->timerQueueHandle);

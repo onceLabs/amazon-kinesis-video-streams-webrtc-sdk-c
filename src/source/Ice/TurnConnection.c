@@ -420,6 +420,7 @@ static STATUS turnConnectionHandleStunError(PTurnConnection pTurnConnection, PBY
     MUTEX_LOCK(pTurnConnection->lock);
     locked = TRUE;
 
+    stunPacketType = (UINT16) getInt16(*((PUINT16) pBuffer));
     /* we could get errors like expired nonce after sending the deallocation packet. The allocate would have been
      * deallocated even if the response is error response, and if we try to deallocate again we would get invalid
      * allocation error. Therefore if we get an error after we've sent the deallocation packet, consider the

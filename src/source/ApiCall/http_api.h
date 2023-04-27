@@ -37,6 +37,8 @@ STATUS http_api_getChannelEndpoint(PSignalingClient pSignalingClient, PUINT32 pH
 STATUS http_api_getIceConfig(PSignalingClient pSignalingClient, PUINT32 pHttpStatusCode);
 STATUS http_api_deleteChannel(PSignalingClient pSignalingClient, PUINT32 pHttpStatusCode);
 STATUS http_api_getIotCredential(PIotCredentialProvider pIotCredentialProvider);
+STATUS http_api_describeMediaStorageConf(PSignalingClient pSignalingClient, PUINT32 pHttpStatusCode);
+STATUS http_api_joinStorageSession(PSignalingClient pSignalingClient, PUINT32 pHttpStatusCode);
 
 STATUS http_api_rsp_createChannel(const CHAR* pResponseStr, UINT32 resultLen, PSignalingClient pSignalingClient);
 STATUS http_api_rsp_deleteChannel(const CHAR* pResponseStr, UINT32 resultLen, PSignalingClient pSignalingClient);
@@ -45,6 +47,8 @@ STATUS http_api_rsp_getChannelEndpoint(const CHAR* pResponseStr, UINT32 resultLe
 STATUS http_api_rsp_getIceConfig(const CHAR* pResponseStr, UINT32 resultLen, PSignalingClient pSignalingClient);
 // STATUS http_api_rsp_getIoTCredential(const CHAR* pResponseStr, UINT32 resultLen, PSignalingClient pSignalingClient);
 STATUS http_api_rsp_getIoTCredential(PIotCredentialProvider pIotCredentialProvider, const CHAR* pResponseStr, UINT32 resultLen);
+STATUS http_api_rsp_describeMediaStorageConf(const CHAR* pResponseStr, UINT32 resultLen, PSignalingClient pSignalingClient);
+
 #ifdef __cplusplus
 }
 #endif

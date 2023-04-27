@@ -49,6 +49,8 @@ extern "C" {
 // Termination timeout
 #define SIGNALING_CLIENT_SHUTDOWN_TIMEOUT ((2 + SIGNALING_SERVICE_API_CALL_TIMEOUT_IN_SECONDS) * HUNDREDS_OF_NANOS_IN_A_SECOND)
 
+#define SIGNALING_JOIN_SESSION_STATE_TIMEOUT (15 * HUNDREDS_OF_NANOS_IN_A_SECOND)
+
 // Signaling client state literal definitions
 #define SIGNALING_CLIENT_STATE_UNKNOWN_STR         "Unknown"
 #define SIGNALING_CLIENT_STATE_NEW_STR             "New"
@@ -63,6 +65,8 @@ extern "C" {
 #define SIGNALING_CLIENT_STATE_DISCONNECTED_STR    "Disconnected"
 #define SIGNALING_CLIENT_STATE_DELETE_STR          "Delete"
 #define SIGNALING_CLIENT_STATE_DELETED_STR         "Deleted"
+#define SIGNALING_CLIENT_STATE_DESCRIBE_MEDIA_STR  "Describe media storage"
+#define SIGNALING_CLIENT_STATE_JOIN_SESSION_STR    "Join Session"
 
 // Error refreshing ICE server configuration string
 #define SIGNALING_ICE_CONFIG_REFRESH_ERROR_MSG "Failed refreshing ICE server configuration with status code 0x%08x."
@@ -170,6 +174,8 @@ typedef struct {
     // Signaling endpoint
     CHAR channelEndpointHttps[MAX_SIGNALING_ENDPOINT_URI_LEN + 1];
     //!< http_api_rsp_getChannelEndpoint
+    // Media storage endpoint
+    CHAR channelEndpointWebrtc[MAX_SIGNALING_ENDPOINT_URI_LEN + 1];
     // #http_api_getIceConfig
     IceConfigInfo iceConfigs[MAX_ICE_CONFIG_COUNT];
 } SignalingChannelDescription, *PSignalingChannelDescription;
@@ -199,6 +205,10 @@ typedef struct {
     SignalingApiCallHookFunc getIceConfigPostHookFn;
     SignalingApiCallHookFunc connectPreHookFn;  //!< the pre-hook function of connecting signaling channel.
     SignalingApiCallHookFunc connectPostHookFn; //!< the post-hook function of connecting signaling channel.
+    SignalingApiCallHookFunc joinSessionPreHookFn;
+    SignalingApiCallHookFunc joinSessionPostHookFn;
+    SignalingApiCallHookFunc descirbeMediaStorageConfPreHookFn;
+    SignalingApiCallHookFunc descirbeMediaStorageConfPostHookFn;
     SignalingApiCallHookFunc deletePreHookFn;
     SignalingApiCallHookFunc deletePostHookFn;
 } SignalingClientInfoInternal, *PSignalingClientInfoInternal;
@@ -227,6 +237,8 @@ typedef struct {
     UINT64 getIceConfigTime;
     UINT64 deleteTime;
     UINT64 connectTime;
+    UINT64 describeMediaTime;
+    UINT64 joinSessionTime;
 } ApiCallHistory, *PApiCallHistory;
 
 /**
@@ -236,6 +248,10 @@ typedef struct {
     volatile SIZE_T apiCallStatus;  //!< Current service call result
     volatile ATOMIC_BOOL shutdown;  //!< Indicate the signaling is freed. Shutting down the entire client
     volatile ATOMIC_BOOL connected; //!< Indidcate the signaling is connected or not.
+    // Retrieve the information of media storage configuration
+    volatile ATOMIC_BOOL describeMediaStorageConf;
+    // Join the media storage.
+    volatile ATOMIC_BOOL joinSession;
     // Having state machine logic rely on call result of HTTP_STATUS_SIGNALING_RECONNECT_ICE
     // to transition to ICE config state is not enough in Async update mode when
     // connect is in progress as the result of connect will override the result
@@ -257,6 +273,8 @@ typedef struct {
     PChannelInfo pChannelInfo;                         //!< Channel info
     SignalingChannelDescription channelDescription;    //!< Returned signaling channel description
     //!< the information from calling the api of describing the channel.
+    // Returned media storage session
+    MediaStorageConfig mediaStorageConfig;
 
     // Number of Ice Server objects
     UINT32 iceConfigCount;
@@ -463,6 +481,9 @@ STATUS validateIceConfiguration(PSignalingClient pSignalingClient);
 STATUS signalingRemoveOngoingMessage(PSignalingClient, PCHAR);
 STATUS signalingGetOngoingMessage(PSignalingClient, PCHAR, PCHAR, PSignalingMessage*);
 
+STATUS joinStorageSession(PSignalingClient, UINT64);
+STATUS signalingJoinSessionSync(PSignalingClient);
+STATUS describeMediaStorageConf(PSignalingClient, UINT64);
 STATUS signalingGetMetrics(PSignalingClient pSignalingClient, PSignalingClientMetrics pSignalingClientMetrics);
 
 #ifdef __cplusplus

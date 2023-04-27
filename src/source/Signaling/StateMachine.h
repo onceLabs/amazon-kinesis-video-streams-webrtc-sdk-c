@@ -41,6 +41,8 @@ extern "C" {
 #define SIGNALING_STATE_CONNECT        ((UINT64) (1 << 7))
 #define SIGNALING_STATE_CONNECTED      ((UINT64) (1 << 8))
 #define SIGNALING_STATE_DISCONNECTED   ((UINT64) (1 << 9))
+#define SIGNALING_STATE_DESCRIBE_MEDIA ((UINT64) (1 << 10))
+#define SIGNALING_STATE_JOIN_SESSION   ((UINT64) (1 << 11))
 
 typedef PVOID SignalingFsmHandle;
 typedef SignalingFsmHandle* PSignalingFsmHandle;
