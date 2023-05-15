@@ -164,6 +164,9 @@ if(BUILD_DEPENDENCIES)
       -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS})
   build_dependency(kvsCommonLws ${BUILD_ARGS})
 
+  #  building fleet provisioning from aws-iot-device-sdk-embedded-C
+  build_dependency(provision)
+
   message(STATUS "Finished building dependencies.")
 endif()
 

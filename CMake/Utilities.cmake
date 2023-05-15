@@ -12,7 +12,8 @@ function(build_dependency lib_name)
       curl
       mbedtls
       kvspic
-      kvsCommonLws)
+      kvsCommonLws
+      provision)
   list(FIND supported_libs ${lib_name} index)
   if(${index} EQUAL -1)
     message(WARNING "${lib_name} is not supported to build from source")
@@ -41,8 +42,9 @@ function(build_dependency lib_name)
   # anything after lib_name(${ARGN}) are assumed to be arguments passed over to
   # library building cmake.
   set(build_args ${ARGN})
-
-  file(REMOVE_RECURSE ${OPEN_SRC_INSTALL_PREFIX}/lib${lib_name})
+  if(NOT(${lib_name} STREQUAL "provision"))
+    file(REMOVE_RECURSE ${OPEN_SRC_INSTALL_PREFIX}/lib${lib_name})
+  endif()
 
   # build library
   configure_file(
@@ -71,8 +73,9 @@ function(build_dependency lib_name)
   if(result)
     message(FATAL_ERROR "CMake step for lib${lib_name} failed: ${result}")
   endif()
-
-  file(REMOVE_RECURSE ${OPEN_SRC_INSTALL_PREFIX}/lib${lib_name})
+  if(NOT(${lib_name} STREQUAL "provision"))
+    file(REMOVE_RECURSE ${OPEN_SRC_INSTALL_PREFIX}/lib${lib_name})
+  endif()
 endfunction()
 
 function(enableSanitizer SANITIZER)

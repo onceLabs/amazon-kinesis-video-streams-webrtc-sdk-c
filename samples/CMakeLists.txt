@@ -75,6 +75,57 @@ if(GST_FOUND)
   )
 endif()
 
-install(TARGETS kvsWebrtcClientMaster kvsWebrtcClientViewer discoverNatBehavior
+# Include Fleet Provisioning library's source and header path variables.
+
+set(FLEET_PROVISION_PATH ${OPEN_SRC_INSTALL_PREFIX}/libprovision/build/src) 
+
+file(GLOB TINYCBOR_HEADERS "${FLEET_PROVISION_PATH}/project_libprovision/libraries/3rdparty/tinycbor/src/*.h")
+file(COPY ${TINYCBOR_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
+
+# corePKCS11 config
+file(GLOB COREPKCS11_HEADERS "${FLEET_PROVISION_PATH}/project_libprovision/demos/pkcs11/common/include/core_pkcs11_config.h")
+file(COPY ${COREPKCS11_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
+
+# logging
+file(GLOB LOGGING_HEADERS "${FLEET_PROVISION_PATH}/project_libprovision/demos/logging-stack/*.h")
+file(COPY ${LOGGING_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
+
+# mbedtls
+file(GLOB MBEDTLS_HEADERS
+	"${FLEET_PROVISION_PATH}/project_libprovision/libraries/3rdparty/mbedtls/include/mbedtls"
+	"${FLEET_PROVISION_PATH}/project_libprovision/libraries/standard/corePKCS11/source/dependency/3rdparty/mbedtls_utils/mbedtls_utils.h")
+file(COPY ${MBEDTLS_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
+
+
+include(
+    ${FLEET_PROVISION_PATH}/project_libprovision/libraries/aws/fleet-provisioning-for-aws-iot-embedded-sdk/fleetprovisioningFilePaths.cmake )
+
+include_directories(./)
+include_directories(./fleetProvisioning/)
+include_directories(${OPEN_SRC_INSTALL_PREFIX}/include/build/src/project_libprovision/libraries/3rdparty/tinycbor/src/)
+include_directories(${FLEET_PROVISIONING_INCLUDE_PUBLIC_DIRS})
+
+file(COPY ${FLEET_PROVISION_PATH}/project_libprovision-build/lib/libmbedtls.so DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/lib)
+file(COPY ${FLEET_PROVISION_PATH}/project_libprovision-build/lib/libtinycbor.so DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/lib)
+
+add_executable(
+  kvsWebRTCClientMasterWithProvisioning
+  Common.c
+  ${FLEET_PROVISIONING_SOURCES}
+  ./fleetProvisioning/fleet_provisioning_serializer.c
+  ./fleetProvisioning/fleet_provisioning_with_crt.c
+  ./fleetProvisioning/mqtt_operations.c
+  ./fleetProvisioning/pkcs11_operations.c
+  ./fleetProvisioning/mbedtls_posix.c
+  kvsWebRTCClientMasterWithProvisioning.c)
+target_link_libraries(kvsWebRTCClientMasterWithProvisioning kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets
+                       tinycbor
+                       mbedtls
+                       clock_posix
+                       transport_mbedtls_pkcs11_posix
+                       aws_iot_mqtt
+                       aws_iot_backoff_algorithm)
+
+install(TARGETS kvsWebrtcClientMaster kvsWebrtcClientViewer discoverNatBehavior kvsWebRTCClientMasterWithProvisioning
   RUNTIME DESTINATION bin
 )

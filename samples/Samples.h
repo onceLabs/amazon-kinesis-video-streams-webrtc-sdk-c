@@ -46,11 +46,83 @@ extern "C" {
 #define IOT_CORE_ROLE_ALIAS          ((PCHAR) "AWS_IOT_CORE_ROLE_ALIAS")
 #define IOT_CORE_THING_NAME          ((PCHAR) "AWS_IOT_CORE_THING_NAME")
 
+#define AWS_IOT_ENDPOINT             ((PCHAR) "AWS_IOT_ENDPOINT")
+#define IOT_CORE_CLAIM_CERT          ((PCHAR) "AWS_IOT_CLAIM_CERT_PATH")
+#define IOT_CORE_CLAIM_PRIVATE_KEY   ((PCHAR) "AWS_IOT_CLAIM_PRIVATE_KEY_PATH")
+#define IOT_CORE_PROVISIONING_TEMPLATE_NAME   ((PCHAR) "AWS_IOT_CORE_PROVISIONING_TEMPLATE_NAME")
+#define IOT_CORE_ROOT_CA_CERT        ((PCHAR) "AWS_IOT_CORE_ROOT_CA_CERT")
+
+/**
+ * @brief AWS IoT MQTT broker port number.
+ *
+ * In general, port 8883 is for secured MQTT connections.
+ *
+ * @note Port 443 requires use of the ALPN TLS extension with the ALPN protocol
+ * name. When using port 8883, ALPN is not required.
+ */
+#define AWS_MQTT_PORT    ( 8883 )
+
+/**
+ * @brief Size of the network buffer for MQTT packets. Must be large enough to
+ * hold the GetCertificateFromCsr response, which, among other things, includes
+ * a PEM encoded certificate.
+ */
+#define NETWORK_BUFFER_SIZE       ( 4096U )
+
+/**
+ * @brief The name of the operating system that the application is running on.
+ * The current value is given as an example. Please update for your specific
+ * operating system.
+ */
+#define OS_NAME                   "Ubuntu"
+
+/**
+ * @brief The version of the operating system that the application is running
+ * on. The current value is given as an example. Please update for your specific
+ * operating system version.
+ */
+#define OS_VERSION                "18.04 LTS"
+
+/**
+ * @brief The name of the hardware platform the application is running on. The
+ * current value is given as an example. Please update for your specific
+ * hardware platform.
+ */
+#define HARDWARE_PLATFORM_NAME    "PC"
+
+/**
+ * @brief The name of the MQTT library used and its version, following an "@"
+ * symbol.
+ */
+//#include "core_mqtt.h"
+#define MQTT_LIB    "core-mqtt@" MQTT_LIBRARY_VERSION
+
+/*
+ * AWS IoT Core allows the use of HTTP or MQTT over TCP port 443. Connections
+ * to IoT Core endpoints on port 443 default to the HTTP protocol.
+ *
+ * Clients must use the TLS Application-Layer Protocol Negotiation extension
+ * to notify the service of it's desired protocol or authentication mode.
+ *
+ * For more information, please reference the following URL:
+ * https://docs.aws.amazon.com/iot/latest/developerguide/protocols.html
+ */
+
+#define AWS_IOT_ALPN_MQTT_CUSTOM_AUTH                "mqtt"
+#define AWS_IOT_ALPN_MQTT_CA_AUTH                    "x-amzn-mqtt-ca"
+#define AWS_IOT_ALPN_HTTP_CA_AUTH                    "x-amzn-http-ca"
+#define AWS_IOT_ALPN_MQTT_CUSTOM_AUTH_MBEDTLS        { AWS_IOT_ALPN_MQTT_CUSTOM_AUTH, NULL }
+#define AWS_IOT_ALPN_MQTT_CA_AUTH_MBEDTLS            { AWS_IOT_ALPN_MQTT_CA_AUTH, NULL }
+#define AWS_IOT_ALPN_HTTP_CA_AUTH_MBEDTLS            { AWS_IOT_ALPN_HTTP_CA_AUTH, NULL }
+
 #define MASTER_DATA_CHANNEL_MESSAGE "This message is from the KVS Master"
 #define VIEWER_DATA_CHANNEL_MESSAGE "This message is from the KVS Viewer"
 
 /* Uncomment the following line in order to enable IoT credentials checks in the provided samples */
-//#define IOT_CORE_ENABLE_CREDENTIALS  1
+#define IOT_CORE_ENABLE_CREDENTIALS  1
+
+/* when define IOT_CORE_ENABLE_CREDENTIALS, if use PKCS11 then set, else not set */
+#define ENABLE_PKCS11 1
 
 typedef enum {
     SAMPLE_STREAMING_VIDEO_ONLY,
