@@ -10,10 +10,10 @@ function(build_dependency lib_name)
       usrsctp
       websockets
       curl
+      provision
       mbedtls
       kvspic
-      kvsCommonLws
-      provision)
+      kvsCommonLws)
   list(FIND supported_libs ${lib_name} index)
   if(${index} EQUAL -1)
     message(WARNING "${lib_name} is not supported to build from source")

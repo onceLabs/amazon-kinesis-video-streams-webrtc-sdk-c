@@ -249,7 +249,7 @@ static MbedtlsStatus_t configureMbedtls( MbedtlsContext_t * pMbedtlsContext,
         mbedtls_ssl_conf_cert_profile( &( pMbedtlsContext->config ), &( pMbedtlsContext->certProfile ) );
         mbedtls_ssl_conf_read_timeout( &( pMbedtlsContext->config ), recvTimeoutMs );
         mbedtls_ssl_conf_dbg( &pMbedtlsContext->config, mbedtlsDebugPrint, NULL );
-        mbedtls_debug_set_threshold( 3 );
+        mbedtls_debug_set_threshold( MBEDTLS_DEBUG_LOG_LEVEL );
 
         returnStatus = configureMbedtlsCertAndKey( pMbedtlsContext, pMbedtlsCredentials );
     }

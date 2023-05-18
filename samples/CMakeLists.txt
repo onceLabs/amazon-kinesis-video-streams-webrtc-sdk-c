@@ -92,8 +92,8 @@ file(COPY ${LOGGING_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
 
 # mbedtls
 file(GLOB MBEDTLS_HEADERS
-	"${FLEET_PROVISION_PATH}/project_libprovision/libraries/3rdparty/mbedtls/include/mbedtls"
-	"${FLEET_PROVISION_PATH}/project_libprovision/libraries/standard/corePKCS11/source/dependency/3rdparty/mbedtls_utils/mbedtls_utils.h")
+        "${FLEET_PROVISION_PATH}/project_libprovision/libraries/3rdparty/mbedtls/include/mbedtls"
+        "${FLEET_PROVISION_PATH}/project_libprovision/libraries/standard/corePKCS11/source/dependency/3rdparty/mbedtls_utils/mbedtls_utils.h")
 file(COPY ${MBEDTLS_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
 
 
@@ -105,7 +105,7 @@ include_directories(./fleetProvisioning/)
 include_directories(${OPEN_SRC_INSTALL_PREFIX}/include/build/src/project_libprovision/libraries/3rdparty/tinycbor/src/)
 include_directories(${FLEET_PROVISIONING_INCLUDE_PUBLIC_DIRS})
 
-file(COPY ${FLEET_PROVISION_PATH}/project_libprovision-build/lib/libmbedtls.so DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/lib)
+#file(COPY ${FLEET_PROVISION_PATH}/project_libprovision-build/lib/libmbedtls.so DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/lib)
 file(COPY ${FLEET_PROVISION_PATH}/project_libprovision-build/lib/libtinycbor.so DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/lib)
 
 add_executable(
@@ -115,14 +115,16 @@ add_executable(
   ./fleetProvisioning/fleet_provisioning_serializer.c
   ./fleetProvisioning/fleet_provisioning_with_crt.c
   ./fleetProvisioning/mqtt_operations.c
-  ./fleetProvisioning/pkcs11_operations.c
+#  ./fleetProvisioning/pkcs11_operations.c
   ./fleetProvisioning/mbedtls_posix.c
   kvsWebRTCClientMasterWithProvisioning.c)
 target_link_libraries(kvsWebRTCClientMasterWithProvisioning kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets
                        tinycbor
+                       mbedcrypto
+                       mbedx509
                        mbedtls
                        clock_posix
-                       transport_mbedtls_pkcs11_posix
+#                       transport_mbedtls_pkcs11_posix
                        aws_iot_mqtt
                        aws_iot_backoff_algorithm)
 
