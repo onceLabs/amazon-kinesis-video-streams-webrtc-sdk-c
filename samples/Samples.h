@@ -122,7 +122,7 @@ extern "C" {
 #define IOT_CORE_ENABLE_CREDENTIALS  1
 
 /* when define IOT_CORE_ENABLE_CREDENTIALS, if use PKCS11 then set, else not set */
-// #define ENABLE_PKCS11 1
+#define ENABLE_PKCS11 1
 
 typedef enum {
     SAMPLE_STREAMING_VIDEO_ONLY,

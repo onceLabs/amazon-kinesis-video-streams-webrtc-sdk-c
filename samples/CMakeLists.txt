@@ -76,15 +76,9 @@ if(GST_FOUND)
 endif()
 
 # Include Fleet Provisioning library's source and header path variables.
-
 set(FLEET_PROVISION_PATH ${OPEN_SRC_INSTALL_PREFIX}/libprovision/build/src) 
-
-file(GLOB TINYCBOR_HEADERS "${FLEET_PROVISION_PATH}/project_libprovision/libraries/3rdparty/tinycbor/src/*.h")
-file(COPY ${TINYCBOR_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
-
-# corePKCS11 config
-file(GLOB COREPKCS11_HEADERS "${FLEET_PROVISION_PATH}/project_libprovision/demos/pkcs11/common/include/core_pkcs11_config.h")
-file(COPY ${COREPKCS11_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
+include(
+    ${FLEET_PROVISION_PATH}/project_libprovision/libraries/aws/fleet-provisioning-for-aws-iot-embedded-sdk/fleetprovisioningFilePaths.cmake )
 
 # logging
 file(GLOB LOGGING_HEADERS "${FLEET_PROVISION_PATH}/project_libprovision/demos/logging-stack/*.h")
@@ -92,31 +86,57 @@ file(COPY ${LOGGING_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
 
 # mbedtls
 file(GLOB MBEDTLS_HEADERS
-        "${FLEET_PROVISION_PATH}/project_libprovision/libraries/3rdparty/mbedtls/include/mbedtls"
         "${FLEET_PROVISION_PATH}/project_libprovision/libraries/standard/corePKCS11/source/dependency/3rdparty/mbedtls_utils/mbedtls_utils.h")
 file(COPY ${MBEDTLS_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
 
-
-include(
-    ${FLEET_PROVISION_PATH}/project_libprovision/libraries/aws/fleet-provisioning-for-aws-iot-embedded-sdk/fleetprovisioningFilePaths.cmake )
-
-include_directories(./)
-include_directories(./fleetProvisioning/)
-include_directories(${OPEN_SRC_INSTALL_PREFIX}/include/build/src/project_libprovision/libraries/3rdparty/tinycbor/src/)
-include_directories(${FLEET_PROVISIONING_INCLUDE_PUBLIC_DIRS})
-
-#file(COPY ${FLEET_PROVISION_PATH}/project_libprovision-build/lib/libmbedtls.so DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/lib)
+file(GLOB TINYCBOR_HEADERS "${FLEET_PROVISION_PATH}/project_libprovision/libraries/3rdparty/tinycbor/src/*.h")
+file(COPY ${TINYCBOR_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
 file(COPY ${FLEET_PROVISION_PATH}/project_libprovision-build/lib/libtinycbor.so DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/lib)
+
+# corePKCS11 config
+file(GLOB COREPKCS11_HEADERS "${FLEET_PROVISION_PATH}/project_libprovision/demos/pkcs11/common/include/core_pkcs11_config.h")
+file(COPY ${COREPKCS11_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
+
+# Set path to corePKCS11 and it's third party libraries.
+set(COREPKCS11_LOCATION "${FLEET_PROVISION_PATH}/project_libprovision/libraries/standard/corePKCS11")
+set(CORE_PKCS11_3RDPARTY_LOCATION "${COREPKCS11_LOCATION}/source/dependency/3rdparty")
+
+# Include PKCS #11 library's source and header path variables.
+include( ${COREPKCS11_LOCATION}/pkcsFilePaths.cmake )
+
+list(APPEND PKCS_SOURCES
+    "${COREPKCS11_LOCATION}/source/portable/os/posix/core_pkcs11_pal.c"
+    "${COREPKCS11_LOCATION}/source/portable/os/core_pkcs11_pal_utils.c"
+    "${CORE_PKCS11_3RDPARTY_LOCATION}/mbedtls_utils/mbedtls_utils.c"
+)
+
+list(APPEND INCLUDE_DIR
+    "./"
+    "./fleetProvisioning/"
+    "${CMAKE_CURRENT_LIST_DIR}"
+    "${OPEN_SRC_INSTALL_PREFIX}/include/"
+    "${OPEN_SRC_INSTALL_PREFIX}/include/mbedtls/"
+    "${FLEET_PROVISIONING_INCLUDE_PUBLIC_DIRS}"
+    "${OPEN_SRC_INSTALL_PREFIX}/libprovision/build/src/project_libprovision/platform/include"
+    "${COREPKCS11_LOCATION}"
+    "${CORE_PKCS11_3RDPARTY_LOCATION}"
+    "${COREPKCS11_LOCATION}/source/portable/os/"
+)
+
+include_directories(${INCLUDE_DIR})
+
 
 add_executable(
   kvsWebRTCClientMasterWithProvisioning
   Common.c
   ${FLEET_PROVISIONING_SOURCES}
+  ${PKCS_SOURCES}
   ./fleetProvisioning/fleet_provisioning_serializer.c
   ./fleetProvisioning/fleet_provisioning_with_crt.c
   ./fleetProvisioning/mqtt_operations.c
-#  ./fleetProvisioning/pkcs11_operations.c
+  ./fleetProvisioning/pkcs11_operations.c
   ./fleetProvisioning/mbedtls_posix.c
+  ./fleetProvisioning/mbedtls_pkcs11_posix.c
   kvsWebRTCClientMasterWithProvisioning.c)
 target_link_libraries(kvsWebRTCClientMasterWithProvisioning kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets
                        tinycbor
@@ -124,7 +144,6 @@ target_link_libraries(kvsWebRTCClientMasterWithProvisioning kvsWebrtcClient kvsW
                        mbedx509
                        mbedtls
                        clock_posix
-#                       transport_mbedtls_pkcs11_posix
                        aws_iot_mqtt
                        aws_iot_backoff_algorithm)
 
