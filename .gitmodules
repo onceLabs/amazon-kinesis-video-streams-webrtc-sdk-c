@@ -4,3 +4,18 @@
 [submodule "open-source/amazon-kinesis-video-streams-producer-c"]
 	path = open-source/amazon-kinesis-video-streams-producer-c
 	url = https://github.com/awslabs/amazon-kinesis-video-streams-producer-c.git
+[submodule "libraries/3rdparty/tinycbor"]
+	path = libraries/3rdparty/tinycbor
+	url = https://github.com/intel/tinycbor
+[submodule "libraries/aws/fleet-provisioning-for-aws-iot-embedded-sdk"]
+	path = libraries/aws/fleet-provisioning-for-aws-iot-embedded-sdk
+	url = https://github.com/aws/Fleet-Provisioning-for-AWS-IoT-embedded-sdk
+[submodule "libraries/standard/backoffAlgorithm"]
+	path = libraries/standard/backoffAlgorithm
+	url = https://github.com/FreeRTOS/backoffAlgorithm.git
+[submodule "libraries/standard/corePKCS11"]
+	path = libraries/standard/corePKCS11
+	url = https://github.com/FreeRTOS/corePKCS11.git
+[submodule "libraries/standard/coreMQTT"]
+	path = libraries/standard/coreMQTT
+	url = https://github.com/FreeRTOS/coreMQTT.git

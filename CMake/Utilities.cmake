@@ -10,7 +10,6 @@ function(build_dependency lib_name)
       usrsctp
       websockets
       curl
-      provision
       mbedtls
       kvspic
       kvsCommonLws)
