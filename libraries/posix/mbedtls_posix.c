@@ -31,8 +31,6 @@
 #include "mbedtls/debug.h"
 #include "mbedtls/error.h"
 
-
-#include "Samples.h"
 /*-----------------------------------------------------------*/
 
 /**
@@ -457,11 +455,11 @@ MbedtlsStatus_t Mbedtls_Connect( NetworkContext_t * pNetworkContext,
         ( pMbedtlsCredentials->pClientCertPath == NULL ) ||
         ( pMbedtlsCredentials->pPrivateKeyPath == NULL ) )
     {
-        DLOGE("Invalid input parameter(s): Arguments cannot be NULL. pNetworkContext=%p, "
+        LogError( ( "Invalid input parameter(s): Arguments cannot be NULL. pNetworkContext=%p, "
                     "pHostName=%p, pMbedtlsCredentials=%p.",
                     ( void * ) pNetworkContext,
                     ( const void * ) pHostName,
-                    ( const void * ) pMbedtlsCredentials );
+                    ( const void * ) pMbedtlsCredentials ) );
         returnStatus = MBEDTLS_INVALID_PARAMETER;
     }
     else
@@ -483,7 +481,7 @@ MbedtlsStatus_t Mbedtls_Connect( NetworkContext_t * pNetworkContext,
 
         if( mbedtlsError != 0 )
         {
-            DLOGE("Failed to connect to %s with error %d.", pHostName, mbedtlsError );
+            LogError( ( "Failed to connect to %s with error %d.", pHostName, mbedtlsError ) );
             returnStatus = MBEDTLS_CONNECT_FAILURE;
         }
     }
@@ -499,9 +497,9 @@ MbedtlsStatus_t Mbedtls_Connect( NetworkContext_t * pNetworkContext,
 
         if( ( mbedtlsError != 0 ) || ( mbedtls_ssl_get_verify_result( &( pMbedtlsContext->context ) ) != 0U ) )
         {
-            DLOGE("Failed to perform TLS handshake: mbedTLSError= %s : %s.",
+            LogError( ( "Failed to perform TLS handshake: mbedTLSError= %s : %s.",
                         mbedtlsHighLevelCodeOrDefault( mbedtlsError ),
-                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ) );
+                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ) ) );
             returnStatus = MBEDTLS_HANDSHAKE_FAILED;
         }
     }
@@ -513,7 +511,7 @@ MbedtlsStatus_t Mbedtls_Connect( NetworkContext_t * pNetworkContext,
     }
     else
     {
-        DLOGI( "TLS Connection to %s established.", pHostName);
+        LogInfo( ( "TLS Connection to %s established.", pHostName ) );
     }
 
     return returnStatus;

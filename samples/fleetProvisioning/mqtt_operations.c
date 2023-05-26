@@ -45,11 +45,17 @@
 /* Interface include. */
 #include "mqtt_operations.h"
 
+#ifdef KVS_USE_OPENSSL
+#include "openssl_posix.h"
+#endif
+
+#ifdef KVS_USE_MBEDTLS
 /* MbedTLS transport include. */
 #ifdef ENABLE_PKCS11
 #include "mbedtls_pkcs11_posix.h"
 #else
 #include "mbedtls_posix.h"
+#endif
 #endif
 
 /*Include backoff algorithm header for retry logic.*/
@@ -175,6 +181,13 @@ typedef struct PublishPackets {
 } PublishPackets_t;
 
 /* Each compilation unit must define the NetworkContext struct. */
+#ifdef KVS_USE_OPENSSL
+struct NetworkContext {
+    OpensslParams_t * pParams;
+};
+#endif
+
+#ifdef KVS_USE_MBEDTLS
 #ifdef ENABLE_PKCS11
 struct NetworkContext {
     MbedtlsPkcs11Context_t * pParams;
@@ -183,6 +196,7 @@ struct NetworkContext {
 struct NetworkContext {
     MbedtlsContext_t * pParams;
 };
+#endif
 #endif
 
 /*-----------------------------------------------------------*/
@@ -234,14 +248,22 @@ static MQTTContext_t mqttContext = { 0 };
 static NetworkContext_t networkContext = { 0 };
 
 /**
+ * @brief The parameters for Openssl operation.
+ */
+#ifdef KVS_USE_OPENSSL
+static OpensslParams_t opensslParams = { 0 };
+#endif
+
+/**
  * @brief The parameters for MbedTLS operation.
  */
+#ifdef KVS_USE_MBEDTLS
 #ifdef ENABLE_PKCS11
 static MbedtlsPkcs11Context_t tlsContext = { 0 };
 #else
 static MbedtlsContext_t tlsContext = { 0 };
 #endif
-
+#endif
 /**
  * @brief The flag to indicate that the mqtt session is established.
  */
@@ -280,6 +302,16 @@ static MQTTPubAckInfo_t pIncomingPublishRecords[ INCOMING_PUBLISH_RECORD_LEN ];
  */
 static uint32_t generateRandomNumber( void );
 
+#ifdef KVS_USE_OPENSSL
+static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContext,
+        char * pClientCertPath,
+        char * pPrivateKeyPath,
+        char * pEndPoint,
+        char * pRootCaCert);
+#endif
+
+#ifdef KVS_USE_MBEDTLS
+#ifdef ENABLE_PKCS11
 /**
  * @brief Connect to the MQTT broker with reconnection retries.
  *
@@ -291,10 +323,11 @@ static uint32_t generateRandomNumber( void );
  * @param[in] p11Session The PKCS #11 session to use.
  * @param[in] pClientCertLabel The client certificate PKCS #11 label to use.
  * @param[in] pPrivateKeyLabel The private key PKCS #11 label for the client certificate.
+ * @param[in] pEndPoint The endpoint.
+ * @param[in] pRootCaCert The CA certificate.
  *
  * @return false on failure; true on successful connection.
  */
-#ifdef ENABLE_PKCS11
 static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContext,
         CK_SESSION_HANDLE p11Session,
         char * pClientCertLabel,
@@ -302,13 +335,28 @@ static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContex
         char * pEndPoint,
         char * pRootCaCert);
 #else
+/**
+ * @brief Connect to the MQTT broker with reconnection retries.
+ *
+ * If connection fails, retry is attempted after a timeout. Timeout value
+ * exponentially increases until maximum timeout value is reached or the number
+ * of attempts are exhausted.
+ *
+ * @param[out] pNetworkContext The created network context.
+ * @param[in] pClientCertPath The client certificate path.
+ * @param[in] pPrivateKeyPath The private key path.
+ * @param[in] pEndPoint The endpoint.
+ * @param[in] pRootCaCert The CA certificate.
+ *
+ * @return false on failure; true on successful connection.
+ */
 static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContext,
         char * pClientCertPath,
         char * pPrivateKeyPath,
         char * pEndPoint,
         char * pRootCaCert);
 #endif
-
+#endif
 /**
  * @brief Get the free index in the #outgoingPublishPackets array at which an
  * outgoing publish can be stored.
@@ -388,6 +436,99 @@ static uint32_t generateRandomNumber()
     return( ( uint32_t ) rand() );
 }
 /*-----------------------------------------------------------*/
+
+#ifdef KVS_USE_OPENSSL
+static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContext,
+        char * pClientCertPath,
+        char * pPrivateKeyPath,
+        char * pEndPoint,
+        char * pRootCaCert)
+{
+    bool returnStatus = FALSE;
+    BackoffAlgorithmStatus_t backoffAlgStatus = BackoffAlgorithmSuccess;
+    BackoffAlgorithmContext_t reconnectParams;
+    OpensslStatus_t opensslStatus = OPENSSL_SUCCESS;
+    OpensslCredentials_t opensslCredentials;
+    ServerInfo_t serverInfo;
+    uint16_t nextRetryBackOff;
+
+    pNetworkContext->pParams = &opensslParams;
+
+    /* Initialize information to connect to the MQTT broker. */
+    serverInfo.pHostName = pEndPoint; // AWS_IOT_ENDPOINT;
+    serverInfo.hostNameLength = STRLEN(pEndPoint);   // AWS_IOT_ENDPOINT_LENGTH;
+    serverInfo.port = AWS_MQTT_PORT;
+
+    /* Initialize credentials for establishing TLS session. */
+    memset( &opensslCredentials, 0, sizeof( OpensslCredentials_t ) );
+    opensslCredentials.pRootCaPath = pRootCaCert; // ROOT_CA_CERT_PATH;
+    opensslCredentials.pClientCertPath = pClientCertPath; // CLIENT_CERT_PATH;
+    opensslCredentials.pPrivateKeyPath = pPrivateKeyPath; // CLIENT_PRIVATE_KEY_PATH;
+
+    /* AWS IoT requires devices to send the Server Name Indication (SNI)
+     * extension to the Transport Layer Security (TLS) protocol and provide
+     * the complete endpoint address in the host_name field. Details about
+     * SNI for AWS IoT can be found in the link below.
+     * https://docs.aws.amazon.com/iot/latest/developerguide/transport-security.html */
+    opensslCredentials.sniHostName = pEndPoint; // AWS_IOT_ENDPOINT;
+
+    if ( AWS_MQTT_PORT == 443 ) {
+        /* Pass the ALPN protocol name depending on the port and auth type being used.
+         * Please see more details about the ALPN protocol for the AWS IoT MQTT
+         * endpoint in the link below.
+         * https://aws.amazon.com/blogs/iot/mqtt-with-tls-client-authentication-on-port-443-why-it-is-useful-and-how-it-works/
+         */
+        opensslCredentials.pAlpnProtos = AWS_IOT_ALPN_MQTT_CA_AUTH_OPENSSL;
+        opensslCredentials.alpnProtosLen = AWS_IOT_ALPN_MQTT_CA_AUTH_OPENSSL_LEN;
+    }
+
+    /* Initialize reconnect attempts and interval */
+    BackoffAlgorithm_InitializeParams( &reconnectParams,
+                                       CONNECTION_RETRY_BACKOFF_BASE_MS,
+                                       CONNECTION_RETRY_MAX_BACKOFF_DELAY_MS,
+                                       CONNECTION_RETRY_MAX_ATTEMPTS );
+
+    /* Attempt to connect to MQTT broker. If connection fails, retry after
+     * a timeout. Timeout value will exponentially increase until maximum
+     * attempts are reached.
+     */
+    do {
+        /* Establish a TLS session with the MQTT broker. This example connects
+         * to the MQTT broker as specified in AWS_IOT_ENDPOINT and AWS_MQTT_PORT
+         * at the demo config header. */
+        DLOGD("Establishing a TLS session to %.*s:%d.",
+              AWS_IOT_ENDPOINT_LENGTH,
+              AWS_IOT_ENDPOINT,
+              AWS_MQTT_PORT);
+        opensslStatus = Openssl_Connect( pNetworkContext,
+                                         &serverInfo,
+                                         &opensslCredentials,
+                                         TRANSPORT_SEND_RECV_TIMEOUT_MS,
+                                         TRANSPORT_SEND_RECV_TIMEOUT_MS );
+
+        if ( opensslStatus == OPENSSL_SUCCESS ) {
+            /* Connection successful. */
+            returnStatus = true;
+        } else {
+            /* Generate a random number and get back-off value (in milliseconds) for the next connection retry. */
+            backoffAlgStatus = BackoffAlgorithm_GetNextBackoff( &reconnectParams, generateRandomNumber(), &nextRetryBackOff );
+
+            if ( backoffAlgStatus == BackoffAlgorithmRetriesExhausted ) {
+                DLOGE("Connection to the broker failed, all attempts exhausted.");
+            } else if ( backoffAlgStatus == BackoffAlgorithmSuccess ) {
+                DLOGW("Connection to the broker failed. Retrying connection "
+                      "after %hu ms backoff.",
+                      ( unsigned short ) nextRetryBackOff );
+                Clock_SleepMs( nextRetryBackOff );
+            }
+        }
+    } while ( ( opensslStatus != OPENSSL_SUCCESS ) && ( backoffAlgStatus == BackoffAlgorithmSuccess ) );
+
+    return returnStatus;
+}
+#endif
+
+#ifdef KVS_USE_MBEDTLS
 #ifdef ENABLE_PKCS11
 static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContext,
         CK_SESSION_HANDLE p11Session,
@@ -497,11 +638,12 @@ static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContex
 #ifdef ENABLE_PKCS11
     } while ( ( tlsStatus != MBEDTLS_PKCS11_SUCCESS ) && ( backoffAlgStatus == BackoffAlgorithmSuccess ) );
 #else
-    }while ( ( tlsStatus != MBEDTLS_SUCCESS ) && ( backoffAlgStatus == BackoffAlgorithmSuccess ) );
+    } while ( ( tlsStatus != MBEDTLS_SUCCESS ) && ( backoffAlgStatus == BackoffAlgorithmSuccess ) );
 #endif
 
     return returnStatus;
 }
+#endif
 /*-----------------------------------------------------------*/
 
 static bool getNextFreeIndexForOutgoingPublishes( uint8_t * pIndex )
@@ -794,12 +936,20 @@ bool EstablishMqttSession( MQTTPublishCallback_t publishCallback,
          * For this demo, TCP sockets are used to send and receive data
          * from the network. pNetworkContext is an SSL context for OpenSSL.*/
         transport.pNetworkContext = pNetworkContext;
+
+#ifdef KVS_USE_MBEDTLS
 #ifdef ENABLE_PKCS11
         transport.send = Mbedtls_Pkcs11_Send;
         transport.recv = Mbedtls_Pkcs11_Recv;
 #else
         transport.send = Mbedtls_Send;
         transport.recv = Mbedtls_Recv;
+#endif
+#endif
+
+#ifdef KVS_USE_OPENSSL
+        transport.send = Openssl_Send;
+        transport.recv = Openssl_Recv;
 #endif
         transport.writev = NULL;
 
@@ -932,12 +1082,17 @@ bool DisconnectMqttSession( void )
             returnStatus = true;
         }
     }
-
+#ifdef KVS_USE_MBEDTLS
     /* End TLS session, then close TCP connection. */
 #ifdef ENABLE_PKCS11
     ( void ) Mbedtls_Pkcs11_Disconnect( pNetworkContext );
 #else
     ( void ) Mbedtls_Disconnect( pNetworkContext );
+#endif
+#endif
+
+#ifdef KVS_USE_OPENSSL
+    ( void ) Openssl_Disconnect( pNetworkContext);
 #endif
 
     return returnStatus;

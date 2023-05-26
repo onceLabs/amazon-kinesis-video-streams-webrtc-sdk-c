@@ -85,6 +85,38 @@ include(
 file(GLOB LOGGING_HEADERS "${LIBRARIES_PATH}/logging-stack/*.h")
 file(COPY ${LOGGING_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
 
+if(USE_OPENSSL)
+  list(APPEND INCLUDE_DIR
+      "./"
+      "./fleetProvisioning/"
+      "${CMAKE_CURRENT_LIST_DIR}"
+      "${OPEN_SRC_INSTALL_PREFIX}/include/"
+      "${FLEET_PROVISIONING_INCLUDE_PUBLIC_DIRS}"
+  )
+
+  include_directories(${INCLUDE_DIR})
+
+  add_executable(
+    kvsWebRTCClientMasterWithProvisioning
+    Common.c
+    ${FLEET_PROVISIONING_SOURCES}
+    ./fleetProvisioning/fleet_provisioning_serializer.c
+    ./fleetProvisioning/fleet_provisioning_with_crt.c
+    ./fleetProvisioning/mqtt_operations.c
+    kvsWebRTCClientMasterWithProvisioning.c)
+
+  target_link_libraries(kvsWebRTCClientMasterWithProvisioning kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets
+                        tinycbor
+                        ${OPENSSL_SSL_LIBRARY}
+                        ${OPENSSL_CRYPTO_LIBRARY}
+                        sockets_posix
+                        clock_posix
+			openssl_posix
+                        aws_iot_mqtt
+                        aws_iot_backoff_algorithm)
+
+elseif(USE_MBEDTLS)
+
 # mbedtls
 file(GLOB MBEDTLS_HEADERS
         "${LIBRARIES_PATH}/standard/corePKCS11/source/dependency/3rdparty/mbedtls_utils/mbedtls_utils.h")
@@ -127,8 +159,6 @@ add_executable(
   ./fleetProvisioning/fleet_provisioning_with_crt.c
   ./fleetProvisioning/mqtt_operations.c
   ./fleetProvisioning/pkcs11_operations.c
-  ./fleetProvisioning/mbedtls_posix.c
-  ./fleetProvisioning/mbedtls_pkcs11_posix.c
   kvsWebRTCClientMasterWithProvisioning.c)
 
 target_link_libraries(kvsWebRTCClientMasterWithProvisioning kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets
@@ -136,10 +166,13 @@ target_link_libraries(kvsWebRTCClientMasterWithProvisioning kvsWebrtcClient kvsW
                        mbedcrypto
                        mbedx509
                        mbedtls
+                       mbedtls_posix
+                       mbedtls_pkcs11_posix
                        clock_posix
                        aws_iot_pkcs
                        aws_iot_mqtt
                        aws_iot_backoff_algorithm)
+endif()
 
 install(TARGETS kvsWebrtcClientMaster kvsWebrtcClientViewer discoverNatBehavior kvsWebRTCClientMasterWithProvisioning
   RUNTIME DESTINATION bin

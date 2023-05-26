@@ -41,9 +41,7 @@ function(build_dependency lib_name)
   # anything after lib_name(${ARGN}) are assumed to be arguments passed over to
   # library building cmake.
   set(build_args ${ARGN})
-  if(NOT(${lib_name} STREQUAL "provision"))
-    file(REMOVE_RECURSE ${OPEN_SRC_INSTALL_PREFIX}/lib${lib_name})
-  endif()
+  file(REMOVE_RECURSE ${OPEN_SRC_INSTALL_PREFIX}/lib${lib_name})
 
   # build library
   configure_file(
@@ -72,9 +70,7 @@ function(build_dependency lib_name)
   if(result)
     message(FATAL_ERROR "CMake step for lib${lib_name} failed: ${result}")
   endif()
-  if(NOT(${lib_name} STREQUAL "provision"))
-    file(REMOVE_RECURSE ${OPEN_SRC_INSTALL_PREFIX}/lib${lib_name})
-  endif()
+  file(REMOVE_RECURSE ${OPEN_SRC_INSTALL_PREFIX}/lib${lib_name})
 endfunction()
 
 function(enableSanitizer SANITIZER)

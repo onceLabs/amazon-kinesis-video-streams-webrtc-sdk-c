@@ -115,6 +115,20 @@ extern "C" {
 #define AWS_IOT_ALPN_MQTT_CA_AUTH_MBEDTLS            { AWS_IOT_ALPN_MQTT_CA_AUTH, NULL }
 #define AWS_IOT_ALPN_HTTP_CA_AUTH_MBEDTLS            { AWS_IOT_ALPN_HTTP_CA_AUTH, NULL }
 
+/*
+ * @note OpenSSL requires that ALPN identifiers be provided in protocol form.
+ *       This means that each alpn string be prepended with its length.
+ *       When multiple concurrent alpn identifiers are necessary,
+ *       each identifier should be prepended with it's respective length and
+ *       then concatenated together.
+ */
+#define AWS_IOT_ALPN_MQTT_CUSTOM_AUTH_OPENSSL        "\x04mqtt"
+#define AWS_IOT_ALPN_MQTT_CUSTOM_AUTH_OPENSSL_LEN    ( sizeof( AWS_IOT_ALPN_MQTT_CUSTOM_AUTH_OPENSSL ) - 1U )
+#define AWS_IOT_ALPN_MQTT_CA_AUTH_OPENSSL            "\x0ex-amzn-mqtt-ca"
+#define AWS_IOT_ALPN_MQTT_CA_AUTH_OPENSSL_LEN        ( sizeof( AWS_IOT_ALPN_MQTT_CA_AUTH_OPENSSL ) - 1U )
+#define AWS_IOT_ALPN_HTTP_CA_AUTH_OPENSSL            "\x0ex-amzn-http-ca"
+#define AWS_IOT_ALPN_HTTP_CA_AUTH_OPENSSL_LEN        ( sizeof( AWS_IOT_ALPN_HTTP_CA_AUTH_OPENSSL ) - 1U )
+
 #define MASTER_DATA_CHANNEL_MESSAGE "This message is from the KVS Master"
 #define VIEWER_DATA_CHANNEL_MESSAGE "This message is from the KVS Viewer"
 
@@ -122,7 +136,9 @@ extern "C" {
 #define IOT_CORE_ENABLE_CREDENTIALS  1
 
 /* when define IOT_CORE_ENABLE_CREDENTIALS, if use PKCS11 then set, else not set */
+#ifdef KVS_USE_MBEDTLS
 #define ENABLE_PKCS11 1
+#endif
 
 typedef enum {
     SAMPLE_STREAMING_VIDEO_ONLY,

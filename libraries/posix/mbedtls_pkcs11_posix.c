@@ -20,8 +20,6 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#define LOG_CLASS "WebRtcSamples"
-
 /* Standard includes. */
 #include <string.h>
 #include <assert.h>
@@ -35,8 +33,6 @@
 
 /* PKCS #11 includes. */
 #include "core_pki_utils.h"
-
-#include "Samples.h"
 
 /*-----------------------------------------------------------*/
 
@@ -256,7 +252,7 @@ static void mbedtlsDebugPrint( void * ctx,
     ( void ) line;
 
     /* Send the debug string to the portable logger. */
-    DLOGI( "mbedTLS: |%d| %s", level, pStr );
+    printf( "mbedTLS: |%d| %s", level, pStr );
 }
 
 /*-----------------------------------------------------------*/
@@ -284,9 +280,9 @@ static MbedtlsPkcs11Status_t configureMbedtls( MbedtlsPkcs11Context_t * pMbedtls
                                                 MBEDTLS_SSL_PRESET_DEFAULT );
 
     if ( mbedtlsError != 0 ) {
-        DLOGE("Failed to set default SSL configuration: mbedTLSError= %s : %s.",
+        LogError( ( "Failed to set default SSL configuration: mbedTLSError= %s : %s.",
                     mbedtlsHighLevelCodeOrDefault( mbedtlsError ),
-                    mbedtlsLowLevelCodeOrDefault( mbedtlsError ) );
+                    mbedtlsLowLevelCodeOrDefault( mbedtlsError ) ) );
 
         /* Per MbedTLS docs, mbedtls_ssl_config_defaults only fails on memory allocation. */
         returnStatus = MBEDTLS_PKCS11_INSUFFICIENT_MEMORY;
@@ -315,9 +311,9 @@ static MbedtlsPkcs11Status_t configureMbedtls( MbedtlsPkcs11Context_t * pMbedtls
                                           &( pMbedtlsPkcs11Context->config ) );
 
         if ( mbedtlsError != 0 ) {
-            DLOGE("Failed to set up MbedTLS SSL context: mbedTLSError= %s : %s.",
+            LogError( ( "Failed to set up MbedTLS SSL context: mbedTLSError= %s : %s.",
                         mbedtlsHighLevelCodeOrDefault( mbedtlsError ),
-                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ) );
+                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ) ) );
             returnStatus = MBEDTLS_PKCS11_INTERNAL_ERROR;
         }
     }
@@ -336,7 +332,7 @@ static MbedtlsPkcs11Status_t configureMbedtls( MbedtlsPkcs11Context_t * pMbedtls
     if ( returnStatus != MBEDTLS_PKCS11_SUCCESS ) {
         contextFree( pMbedtlsPkcs11Context );
     } else {
-        DLOGD("Configured MbedTLS context.");
+        LogDebug( ( "Configured MbedTLS context." ) );
     }
 
     return returnStatus;
@@ -361,9 +357,9 @@ static MbedtlsPkcs11Status_t configureMbedtlsCertificates( MbedtlsPkcs11Context_
                                                 pMbedtlsPkcs11Credentials->pRootCaPath );
 
     if ( mbedtlsError != 0 ) {
-        DLOGE("Failed to parse server root CA certificate: mbedTLSError= %s : %s.",
+        LogError( ( "Failed to parse server root CA certificate: mbedTLSError= %s : %s.",
                     mbedtlsHighLevelCodeOrDefault( mbedtlsError ),
-                    mbedtlsLowLevelCodeOrDefault( mbedtlsError ) );
+                    mbedtlsLowLevelCodeOrDefault( mbedtlsError ) ) );
         returnStatus = MBEDTLS_PKCS11_INVALID_CREDENTIALS;
     } else {
         mbedtls_ssl_conf_ca_chain( &( pMbedtlsPkcs11Context->config ),
@@ -374,7 +370,7 @@ static MbedtlsPkcs11Status_t configureMbedtlsCertificates( MbedtlsPkcs11Context_
                                        pMbedtlsPkcs11Credentials->pPrivateKeyLabel );
 
         if ( result == false ) {
-            DLOGE("Failed to setup key handling by PKCS #11.");
+            LogError( ( "Failed to setup key handling by PKCS #11." ) );
             returnStatus = MBEDTLS_PKCS11_INVALID_CREDENTIALS;
         }
     }
@@ -386,7 +382,7 @@ static MbedtlsPkcs11Status_t configureMbedtlsCertificates( MbedtlsPkcs11Context_
                                              &( pMbedtlsPkcs11Context->clientCert ) );
 
         if ( result == false ) {
-            DLOGE("Failed to get certificate from PKCS #11 module.");
+            LogError( ( "Failed to get certificate from PKCS #11 module." ) );
             returnStatus = MBEDTLS_PKCS11_INVALID_CREDENTIALS;
         }
     }
@@ -420,9 +416,9 @@ static MbedtlsPkcs11Status_t configureMbedtlsSniAlpn( MbedtlsPkcs11Context_t * p
                                                         pMbedtlsPkcs11Credentials->pAlpnProtos );
 
         if ( mbedtlsError != 0 ) {
-            DLOGE("Failed to configure ALPN protocol in MbedTLS: mbedTLSError= %s : %s.",
+            LogError( ( "Failed to configure ALPN protocol in MbedTLS: mbedTLSError= %s : %s.",
                         mbedtlsHighLevelCodeOrDefault( mbedtlsError ),
-                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ));
+                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ) ) );
             returnStatus = MBEDTLS_PKCS11_INTERNAL_ERROR;
         }
     }
@@ -434,9 +430,9 @@ static MbedtlsPkcs11Status_t configureMbedtlsSniAlpn( MbedtlsPkcs11Context_t * p
                                                  pHostName );
 
         if ( mbedtlsError != 0 ) {
-            DLOGE("Failed to set server name: mbedTLSError= %s : %s.",
+            LogError( ( "Failed to set server name: mbedTLSError= %s : %s.",
                         mbedtlsHighLevelCodeOrDefault( mbedtlsError ),
-                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ));
+                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ) ) );
             returnStatus = MBEDTLS_PKCS11_INTERNAL_ERROR;
         }
     }
@@ -464,9 +460,9 @@ static MbedtlsPkcs11Status_t configureMbedtlsFragmentLength( MbedtlsPkcs11Contex
         mbedtlsError = mbedtls_ssl_conf_max_frag_len( &( pMbedtlsPkcs11Context->config ), MBEDTLS_SSL_MAX_FRAG_LEN_4096 );
 
     if ( mbedtlsError != 0 ) {
-        DLOGE("Failed to maximum fragment length extension: mbedTLSError= %s : %s.",
-                    mbedtlsHighLevelCodeOrDefault( mbedtlsError ),
-                    mbedtlsLowLevelCodeOrDefault( mbedtlsError ));
+            LogError( ( "Failed to maximum fragment length extension: mbedTLSError= %s : %s.",
+                        mbedtlsHighLevelCodeOrDefault( mbedtlsError ),
+                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ) ) );
             returnStatus = MBEDTLS_PKCS11_INTERNAL_ERROR;
         }
     #endif /* ifdef MBEDTLS_SSL_MAX_FRAGMENT_LENGTH */
@@ -489,7 +485,7 @@ static int32_t generateRandomBytes( void * pCtx,
     xResult = pContext->pP11FunctionList->C_GenerateRandom( pContext->p11Session, pRandom, randomLength );
 
     if ( xResult != CKR_OK ) {
-        DLOGE("Failed to generate random bytes from the PKCS #11 module.");
+        LogError( ( "Failed to generate random bytes from the PKCS #11 module." ) );
     }
 
     return ( int32_t ) xResult;
@@ -537,8 +533,8 @@ static bool readCertificateIntoContext( MbedtlsPkcs11Context_t * pContext,
         template.pValue = malloc( template.ulValueLen );
 
         if ( NULL == template.pValue ) {
-            DLOGE("Failed to allocate %lu bytes of memory for certificate buffer.",
-                        template.ulValueLen);
+            LogError( ( "Failed to allocate %lu bytes of memory for certificate buffer.",
+                        template.ulValueLen ) );
             pkcs11Ret = CKR_HOST_MEMORY;
         }
     }
@@ -585,7 +581,7 @@ static bool initializeClientKeys( MbedtlsPkcs11Context_t * pContext,
 
     if ( ( ret == CKR_OK ) && ( pContext->p11PrivateKey == CK_INVALID_HANDLE ) ) {
         ret = CK_INVALID_HANDLE;
-        DLOGE("Could not find private key.");
+        LogError( ( "Could not find private key." ) );
     }
 
     /* Query the device private key type. */
@@ -710,7 +706,7 @@ static int32_t privateKeySigningCallback( void * pContext,
     }
 
     if ( ret != CKR_OK ) {
-        DLOGE("Failed to sign message using PKCS #11 with error code %lu.", ( unsigned long ) ret);
+        LogError( ( "Failed to sign message using PKCS #11 with error code %lu.", ( unsigned long ) ret ) );
     }
 
     return result;
@@ -736,11 +732,11 @@ MbedtlsPkcs11Status_t Mbedtls_Pkcs11_Connect( NetworkContext_t * pNetworkContext
          ( pMbedtlsPkcs11Credentials->pRootCaPath == NULL ) ||
          ( pMbedtlsPkcs11Credentials->pClientCertLabel == NULL ) ||
          ( pMbedtlsPkcs11Credentials->pPrivateKeyLabel == NULL ) ) {
-        DLOGE("Invalid input parameter(s): Arguments cannot be NULL. pNetworkContext=%p, "
+        LogError( ( "Invalid input parameter(s): Arguments cannot be NULL. pNetworkContext=%p, "
                     "pHostName=%p, pMbedtlsPkcs11Credentials=%p.",
                     ( void * ) pNetworkContext,
                     ( const void * ) pHostName,
-                    ( const void * ) pMbedtlsPkcs11Credentials);
+                    ( const void * ) pMbedtlsPkcs11Credentials ) );
         returnStatus = MBEDTLS_PKCS11_INVALID_PARAMETER;
     } else {
         snprintf( portStr, sizeof( portStr ), "%u", port );
@@ -758,7 +754,7 @@ MbedtlsPkcs11Status_t Mbedtls_Pkcs11_Connect( NetworkContext_t * pNetworkContext
                                             MBEDTLS_NET_PROTO_TCP );
 
         if ( mbedtlsError != 0 ) {
-            DLOGE("Failed to connect to %s with error %d.", pHostName, mbedtlsError);
+            LogError( ( "Failed to connect to %s with error %d.", pHostName, mbedtlsError ) );
             returnStatus = MBEDTLS_PKCS11_CONNECT_FAILURE;
         }
     }
@@ -771,9 +767,9 @@ MbedtlsPkcs11Status_t Mbedtls_Pkcs11_Connect( NetworkContext_t * pNetworkContext
                   ( mbedtlsError == MBEDTLS_ERR_SSL_WANT_WRITE ) );
 
         if ( ( mbedtlsError != 0 ) || ( mbedtls_ssl_get_verify_result( &( pMbedtlsPkcs11Context->context ) ) != 0U ) ) {
-            DLOGE("Failed to perform TLS handshake: mbedTLSError= %s : %s.",
+            LogError( ( "Failed to perform TLS handshake: mbedTLSError= %s : %s.",
                         mbedtlsHighLevelCodeOrDefault( mbedtlsError ),
-                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ));
+                        mbedtlsLowLevelCodeOrDefault( mbedtlsError ) ) );
             returnStatus = MBEDTLS_PKCS11_HANDSHAKE_FAILED;
         }
     }
@@ -782,7 +778,7 @@ MbedtlsPkcs11Status_t Mbedtls_Pkcs11_Connect( NetworkContext_t * pNetworkContext
     if ( returnStatus != MBEDTLS_PKCS11_SUCCESS ) {
         contextFree( pMbedtlsPkcs11Context );
     } else {
-        DLOGI("TLS Connection to %s established.", pHostName);
+        LogInfo( ( "TLS Connection to %s established.", pHostName ) );
     }
 
     return returnStatus;
@@ -801,18 +797,18 @@ void Mbedtls_Pkcs11_Disconnect( NetworkContext_t * pNetworkContext )
         tlsStatus = mbedtls_ssl_close_notify( &( pMbedtlsPkcs11Context->context ) );
 
         if ( tlsStatus == 0 ) {
-            DLOGI("Closing TLS connection: TLS close-notify sent.");
+            LogInfo( ( "Closing TLS connection: TLS close-notify sent." ) );
         } else if ( ( tlsStatus == MBEDTLS_ERR_SSL_WANT_READ ) &&
                     ( tlsStatus == MBEDTLS_ERR_SSL_WANT_WRITE ) ) {
             /* WANT_READ and WANT_WRITE can be ignored. Logging for debugging purposes. */
-            DLOGI("TLS close-notify sent; "
+            LogInfo( ( "TLS close-notify sent; "
                        "received %s as the TLS status which can be ignored for close-notify.",
-                       ( tlsStatus == MBEDTLS_ERR_SSL_WANT_READ ) ? "WANT_READ" : "WANT_WRITE");
+                       ( tlsStatus == MBEDTLS_ERR_SSL_WANT_READ ) ? "WANT_READ" : "WANT_WRITE" ) );
         } else {
             /* Ignore the WANT_READ and WANT_WRITE return values. */
-            DLOGE("Failed to send TLS close-notify: mbedTLSError= %s : %s.",
+            LogError( ( "Failed to send TLS close-notify: mbedTLSError= %s : %s.",
                         mbedtlsHighLevelCodeOrDefault( tlsStatus ),
-                        mbedtlsLowLevelCodeOrDefault( tlsStatus ));
+                        mbedtlsLowLevelCodeOrDefault( tlsStatus ) ) );
         }
 
         /* Free contexts. */
@@ -839,18 +835,18 @@ int32_t Mbedtls_Pkcs11_Recv( NetworkContext_t * pNetworkContext,
     if ( ( tlsStatus == MBEDTLS_ERR_SSL_TIMEOUT ) ||
          ( tlsStatus == MBEDTLS_ERR_SSL_WANT_READ ) ||
          ( tlsStatus == MBEDTLS_ERR_SSL_WANT_WRITE ) ) {
-        DLOGD("Failed to read data. However, a read can be retried on this error. "
+        LogDebug( ( "Failed to read data. However, a read can be retried on this error. "
                     "mbedTLSError= %s : %s.",
                     mbedtlsHighLevelCodeOrDefault( tlsStatus ),
-                    mbedtlsLowLevelCodeOrDefault( tlsStatus ));
+                    mbedtlsLowLevelCodeOrDefault( tlsStatus ) ) );
 
         /* Mark these set of errors as a timeout. The libraries may retry read
          * on these errors. */
         tlsStatus = 0;
     } else if ( tlsStatus < 0 ) {
-        DLOGE("Failed to read data: mbedTLSError= %s : %s.",
+        LogError( ( "Failed to read data: mbedTLSError= %s : %s.",
                     mbedtlsHighLevelCodeOrDefault( tlsStatus ),
-                    mbedtlsLowLevelCodeOrDefault( tlsStatus ));
+                    mbedtlsLowLevelCodeOrDefault( tlsStatus ) ) );
     } else {
         /* Empty else marker. */
     }
@@ -877,18 +873,18 @@ int32_t Mbedtls_Pkcs11_Send( NetworkContext_t * pNetworkContext,
     if ( ( tlsStatus == MBEDTLS_ERR_SSL_TIMEOUT ) ||
          ( tlsStatus == MBEDTLS_ERR_SSL_WANT_READ ) ||
          ( tlsStatus == MBEDTLS_ERR_SSL_WANT_WRITE ) ) {
-        DLOGD("Failed to send data. However, send can be retried on this error. "
+        LogDebug( ( "Failed to send data. However, send can be retried on this error. "
                     "mbedTLSError= %s : %s.",
                     mbedtlsHighLevelCodeOrDefault( tlsStatus ),
-                    mbedtlsLowLevelCodeOrDefault( tlsStatus ));
+                    mbedtlsLowLevelCodeOrDefault( tlsStatus ) ) );
 
         /* Mark these set of errors as a timeout. The libraries may retry send
          * on these errors. */
         tlsStatus = 0;
     } else if ( tlsStatus < 0 ) {
-        DLOGE("Failed to send data:  mbedTLSError= %s : %s.",
+        LogError( ( "Failed to send data:  mbedTLSError= %s : %s.",
                     mbedtlsHighLevelCodeOrDefault( tlsStatus ),
-                    mbedtlsLowLevelCodeOrDefault( tlsStatus ));
+                    mbedtlsLowLevelCodeOrDefault( tlsStatus ) ) );
     } else {
         /* Empty else marker. */
     }
