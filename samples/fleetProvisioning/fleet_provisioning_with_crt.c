@@ -62,21 +62,27 @@
 #include <unistd.h>
 #include <errno.h>
 
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_MBEDTLS
+#ifdef KVS_USE_PKCS11
 /* corePKCS11 includes. */
 #include "core_pkcs11.h"
 #include "core_pkcs11_config.h"
+#include "pkcs11_operations.h"
+#endif
 #endif
 
 /* AWS IoT Fleet Provisioning Library. */
 #include "fleet_provisioning.h"
 
-/* Demo includes. */
 #include "mqtt_operations.h"
-#ifdef ENABLE_PKCS11
-#include "pkcs11_operations.h"
-#endif
 #include "fleet_provisioning_serializer.h"
+
+
+#ifdef KVS_USE_OPENSSL
+#ifdef KVS_USE_PKCS11
+#include "openssl_pkcs11_posix.h"
+#endif
+#endif
 
 /**
  * @brief Size of AWS IoT Thing name buffer.
@@ -90,22 +96,6 @@
  * See https://docs.aws.amazon.com/iot/latest/apireference/API_CreateProvisioningTemplateVersion.html#API_CreateProvisioningTemplateVersion_RequestSyntax
 */
 #define MAX_TEMPLATE_NAME_LENGTH             36
-/**
- * @brief The maximum number of times to run the loop in this demo.
- *
- * @note The demo loop is attempted to re-run only if it fails in an iteration.
- * Once the demo loop succeeds in an iteration, the demo exits successfully.
- */
-#ifndef FLEET_PROV_MAX_DEMO_LOOP_COUNT
-#define FLEET_PROV_MAX_DEMO_LOOP_COUNT    ( 3 )
-#endif
-
-/**
- * @brief Time in seconds to wait between retries of the demo loop if
- * demo loop fails.
- */
-#define DELAY_BETWEEN_DEMO_RETRY_ITERATIONS_SECONDS    ( 5 )
-
 /**
  * @brief Size of buffer in which to hold the certificate signing request (CSR).
  */
@@ -476,7 +466,6 @@ static bool writeBufferToFile( char *pBuffer, size_t size, const char *pFileName
 }
 /*-----------------------------------------------------------*/
 
-
 /* Uses the Fleet Provisioning library to generate and validate AWS IoT Fleet
  * Provisioning MQTT topics, and use the coreMQTT library to communicate with
  * the AWS IoT Fleet Provisioning APIs. */
@@ -503,21 +492,21 @@ STATUS createCredentialAndKey(PCHAR pClaimCertPath, PCHAR pClaimKeyPath, PCHAR p
     bool connectionEstablished = FALSE;
     int runCount = 0;
 
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
     CK_RV pkcs11ret = CKR_OK;
     CK_SESSION_HANDLE p11Session;
     bool createPKCS11Session = FALSE;
 #endif
 
     MEMCPY(templateName, pTemplate, STRLEN(pTemplate));
-    DLOGV("claimCertPath:      %s\n", pClaimCertPath);
-    DLOGV("claimKeyPath:       %s\n", pClaimKeyPath);
-    DLOGV("pIotCoreCert:       %s\n", pIotCoreCert);
-    DLOGV("pIotCorePrivateKey: %s\n", pIotCorePrivateKey);
-    DLOGV("serialNum:          %s\n", pSerialNum);
-    DLOGV("template:           %s\n", pTemplate);
-    DLOGV("pEndpoint:          %s\n", pEndpoint);
-    DLOGV("pRootCaCert:        %s\n", pRootCaCert);
+    DLOGV("claimCertPath:      %s", pClaimCertPath);
+    DLOGV("claimKeyPath:       %s", pClaimKeyPath);
+    DLOGV("pIotCoreCert:       %s", pIotCoreCert);
+    DLOGV("pIotCorePrivateKey: %s", pIotCorePrivateKey);
+    DLOGV("serialNum:          %s", pSerialNum);
+    DLOGV("template:           %s", pTemplate);
+    DLOGV("pEndpoint:          %s", pEndpoint);
+    DLOGV("pRootCaCert:        %s", pRootCaCert);
 
     /* Initialize the buffer lengths to their max lengths. */
     certificateLength = CERT_BUFFER_LENGTH;
@@ -525,7 +514,9 @@ STATUS createCredentialAndKey(PCHAR pClaimCertPath, PCHAR pClaimKeyPath, PCHAR p
     ownershipTokenLength = OWNERSHIP_TOKEN_BUFFER_LENGTH;
     privateKeyLength = PRIVATE_KEY_BUFFER_LENGTH;
 
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
+    DLOGI("Establishing PKCS11 session with claim certificate...");
+
     /* Initialize the PKCS #11 module */
     pkcs11ret = xInitializePkcs11Session( &p11Session );
     CHK_ERR(pkcs11ret == CKR_OK, STATUS_INVALID_OPERATION, "Failed to initialize PKCS #11.");
@@ -533,7 +524,7 @@ STATUS createCredentialAndKey(PCHAR pClaimCertPath, PCHAR pClaimKeyPath, PCHAR p
     createPKCS11Session = TRUE;
 
     /* Insert the claim credentials into the PKCS #11 module */
-    status = loadClaimCredentials( p11Session,
+    status = loadClaimCredentialsAndKey( p11Session,
                                    pClaimCertPath,
                                    pkcs11configLABEL_CLAIM_CERTIFICATE,
                                    pClaimKeyPath,
@@ -554,7 +545,7 @@ STATUS createCredentialAndKey(PCHAR pClaimCertPath, PCHAR pClaimKeyPath, PCHAR p
      * Timeout value will exponentially increase until maximum attempts are reached. */
 
     DLOGI("Establishing MQTT session with claim certificate...");
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
     status = EstablishMqttSession( provisioningPublishCallback,
                                    p11Session,
                                    pkcs11configLABEL_CLAIM_CERTIFICATE,
@@ -612,14 +603,17 @@ STATUS createCredentialAndKey(PCHAR pClaimCertPath, PCHAR pClaimKeyPath, PCHAR p
 
     DLOGI("Received certificate with Id: %.*s", ( int ) certificateIdLength, certificateId);
 
+    DLOGI("Save the certificate and key to file ...");
     /* write certificate and key into file */
     status = writeBufferToFile(certificate, certificateLength, pIotCoreCert);
     CHK_ERR(status, STATUS_INVALID_OPERATION, "Failed to save certificate file.");
     status = writeBufferToFile(privateKey, privateKeyLength, pIotCorePrivateKey);
     CHK_ERR(status, STATUS_INVALID_OPERATION, "Failed to save privateKey file.");
 
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
     /* Save the certificate into PKCS #11. */
+    DLOGI("Save the certificate into PKCS #11 ...");
+
     status = loadCertificateAndKey( p11Session,
                                     certificate,
                                     pkcs11configLABEL_DEVICE_CERTIFICATE_FOR_TLS,
@@ -630,12 +624,11 @@ STATUS createCredentialAndKey(PCHAR pClaimCertPath, PCHAR pClaimKeyPath, PCHAR p
     CHK_ERR(status, STATUS_INVALID_OPERATION, "Failed to Save the certificate into PKCS #11.");
 #endif
 
-    /* Unsubscribe from the CreateCertificateFromCsr topics. */
+    /* Unsubscribe from the CreateKeysAndCertificates topics. */
     status = unsubscribeFromKeysResponseTopics();
     CHK_ERR(status, STATUS_INVALID_OPERATION, "Failed to unsubscribeFromKeysResponseTopics");
 
     /**** Call the RegisterThing API **************************************/
-
     /* We then use the RegisterThing API to activate the received certificate,
      * provision AWS IoT resources according to the provisioning template, and
      * receive device configuration. */
@@ -683,7 +676,6 @@ STATUS createCredentialAndKey(PCHAR pClaimCertPath, PCHAR pClaimKeyPath, PCHAR p
 
 CleanUp:
     /**** Disconnect from AWS IoT Core ************************************/
-
     /* As we have completed the provisioning workflow, we disconnect from
      * the connection using the provisioning claim credentials. We will
      * establish a new MQTT connection with the newly provisioned
@@ -693,7 +685,7 @@ CleanUp:
         connectionEstablished = FALSE;
     }
 
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
     if (createPKCS11Session == TRUE) {
         pkcs11CloseSession( p11Session );
     }

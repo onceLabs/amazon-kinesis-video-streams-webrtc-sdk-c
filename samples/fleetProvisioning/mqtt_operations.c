@@ -46,12 +46,16 @@
 #include "mqtt_operations.h"
 
 #ifdef KVS_USE_OPENSSL
+#ifdef KVS_USE_PKCS11
+#include "openssl_pkcs11_posix.h"
+#else
 #include "openssl_posix.h"
+#endif
 #endif
 
 #ifdef KVS_USE_MBEDTLS
 /* MbedTLS transport include. */
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
 #include "mbedtls_pkcs11_posix.h"
 #else
 #include "mbedtls_posix.h"
@@ -182,13 +186,19 @@ typedef struct PublishPackets {
 
 /* Each compilation unit must define the NetworkContext struct. */
 #ifdef KVS_USE_OPENSSL
+#ifdef KVS_USE_PKCS11
+struct NetworkContext {
+    OpensslPkcs11Params_t * pParams;
+};
+#else
 struct NetworkContext {
     OpensslParams_t * pParams;
 };
 #endif
+#endif
 
 #ifdef KVS_USE_MBEDTLS
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
 struct NetworkContext {
     MbedtlsPkcs11Context_t * pParams;
 };
@@ -251,14 +261,18 @@ static NetworkContext_t networkContext = { 0 };
  * @brief The parameters for Openssl operation.
  */
 #ifdef KVS_USE_OPENSSL
+#ifdef KVS_USE_PKCS11
+static OpensslPkcs11Params_t opensslParams = { 0 };
+#else
 static OpensslParams_t opensslParams = { 0 };
+#endif
 #endif
 
 /**
  * @brief The parameters for MbedTLS operation.
  */
 #ifdef KVS_USE_MBEDTLS
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
 static MbedtlsPkcs11Context_t tlsContext = { 0 };
 #else
 static MbedtlsContext_t tlsContext = { 0 };
@@ -303,15 +317,24 @@ static MQTTPubAckInfo_t pIncomingPublishRecords[ INCOMING_PUBLISH_RECORD_LEN ];
 static uint32_t generateRandomNumber( void );
 
 #ifdef KVS_USE_OPENSSL
+#ifdef KVS_USE_PKCS11
+static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContext,
+        CK_SESSION_HANDLE p11Session,
+        char * pClientCertLabel,
+        char * pPrivateKeyLabel,
+        char * pEndPoint,
+        char * pRootCaCert);
+#else
 static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContext,
         char * pClientCertPath,
         char * pPrivateKeyPath,
         char * pEndPoint,
         char * pRootCaCert);
 #endif
+#endif
 
 #ifdef KVS_USE_MBEDTLS
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
 /**
  * @brief Connect to the MQTT broker with reconnection retries.
  *
@@ -438,17 +461,32 @@ static uint32_t generateRandomNumber()
 /*-----------------------------------------------------------*/
 
 #ifdef KVS_USE_OPENSSL
+#ifdef KVS_USE_PKCS11
+static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContext,
+        CK_SESSION_HANDLE p11Session,
+        char * pClientCertLabel,
+        char * pPrivateKeyLabel,
+        char * pEndPoint,
+        char * pRootCaCert)
+#else
 static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContext,
         char * pClientCertPath,
         char * pPrivateKeyPath,
         char * pEndPoint,
         char * pRootCaCert)
+#endif
 {
     bool returnStatus = FALSE;
     BackoffAlgorithmStatus_t backoffAlgStatus = BackoffAlgorithmSuccess;
     BackoffAlgorithmContext_t reconnectParams;
+#ifdef KVS_USE_PKCS11
+    OpensslPkcs11Status_t opensslStatus = OPENSSL_PKCS11_SUCCESS;
+    OpensslPkcs11Credentials_t opensslCredentials;
+#else
     OpensslStatus_t opensslStatus = OPENSSL_SUCCESS;
     OpensslCredentials_t opensslCredentials;
+#endif
+
     ServerInfo_t serverInfo;
     uint16_t nextRetryBackOff;
 
@@ -460,10 +498,17 @@ static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContex
     serverInfo.port = AWS_MQTT_PORT;
 
     /* Initialize credentials for establishing TLS session. */
+#ifdef KVS_USE_PKCS11
+    memset( &opensslCredentials, 0, sizeof( OpensslPkcs11Credentials_t ) );
+    opensslCredentials.pClientCertLabel = pClientCertLabel;
+    opensslCredentials.pPrivateKeyLabel = pPrivateKeyLabel;
+    opensslCredentials.p11Session = p11Session;
+#else
     memset( &opensslCredentials, 0, sizeof( OpensslCredentials_t ) );
-    opensslCredentials.pRootCaPath = pRootCaCert; // ROOT_CA_CERT_PATH;
     opensslCredentials.pClientCertPath = pClientCertPath; // CLIENT_CERT_PATH;
     opensslCredentials.pPrivateKeyPath = pPrivateKeyPath; // CLIENT_PRIVATE_KEY_PATH;
+#endif
+    opensslCredentials.pRootCaPath = pRootCaCert; // ROOT_CA_CERT_PATH;
 
     /* AWS IoT requires devices to send the Server Name Indication (SNI)
      * extension to the Transport Layer Security (TLS) protocol and provide
@@ -500,6 +545,15 @@ static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContex
               AWS_IOT_ENDPOINT_LENGTH,
               AWS_IOT_ENDPOINT,
               AWS_MQTT_PORT);
+#ifdef KVS_USE_PKCS11
+        opensslStatus = Openssl_Pkcs11_Connect( pNetworkContext,
+                                         &serverInfo,
+                                         &opensslCredentials,
+                                         TRANSPORT_SEND_RECV_TIMEOUT_MS,
+                                         TRANSPORT_SEND_RECV_TIMEOUT_MS );
+
+        if ( opensslStatus == OPENSSL_PKCS11_SUCCESS ) {
+#else
         opensslStatus = Openssl_Connect( pNetworkContext,
                                          &serverInfo,
                                          &opensslCredentials,
@@ -507,6 +561,7 @@ static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContex
                                          TRANSPORT_SEND_RECV_TIMEOUT_MS );
 
         if ( opensslStatus == OPENSSL_SUCCESS ) {
+#endif
             /* Connection successful. */
             returnStatus = true;
         } else {
@@ -522,14 +577,17 @@ static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContex
                 Clock_SleepMs( nextRetryBackOff );
             }
         }
+#ifdef KVS_USE_PKCS11
+    } while ( ( opensslStatus != OPENSSL_PKCS11_SUCCESS ) && ( backoffAlgStatus == BackoffAlgorithmSuccess ) );
+#else
     } while ( ( opensslStatus != OPENSSL_SUCCESS ) && ( backoffAlgStatus == BackoffAlgorithmSuccess ) );
-
+#endif
     return returnStatus;
 }
 #endif
 
 #ifdef KVS_USE_MBEDTLS
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
 static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContext,
         CK_SESSION_HANDLE p11Session,
         char * pClientCertLabel,
@@ -546,7 +604,7 @@ static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContex
 {
     bool returnStatus = false;
     BackoffAlgorithmStatus_t backoffAlgStatus = BackoffAlgorithmSuccess;
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
     MbedtlsPkcs11Status_t tlsStatus = MBEDTLS_PKCS11_SUCCESS;
     MbedtlsPkcs11Credentials_t tlsCredentials = { 0 };
 #else
@@ -561,7 +619,7 @@ static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContex
 
     /* Initialize credentials for establishing TLS session. */
     tlsCredentials.pRootCaPath = pRootCaCert;   // ROOT_CA_CERT_PATH;
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
     tlsCredentials.pClientCertLabel = pClientCertLabel;
     tlsCredentials.pPrivateKeyLabel = pPrivateKeyLabel;
     tlsCredentials.p11Session = p11Session;
@@ -603,7 +661,7 @@ static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContex
               AWS_IOT_ENDPOINT_LENGTH,
               AWS_IOT_ENDPOINT,
               AWS_MQTT_PORT);
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
         tlsStatus = Mbedtls_Pkcs11_Connect( pNetworkContext,
                                             pEndPoint, // AWS_IOT_ENDPOINT,
                                             AWS_MQTT_PORT,
@@ -635,7 +693,7 @@ static bool connectToBrokerWithBackoffRetries( NetworkContext_t * pNetworkContex
                 Clock_SleepMs( nextRetryBackOff );
             }
         }
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
     } while ( ( tlsStatus != MBEDTLS_PKCS11_SUCCESS ) && ( backoffAlgStatus == BackoffAlgorithmSuccess ) );
 #else
     } while ( ( tlsStatus != MBEDTLS_SUCCESS ) && ( backoffAlgStatus == BackoffAlgorithmSuccess ) );
@@ -877,7 +935,7 @@ static bool waitForPacketAck( MQTTContext_t * pMqttContext,
 }
 /*-----------------------------------------------------------*/
 
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
 bool EstablishMqttSession( MQTTPublishCallback_t publishCallback,
                            CK_SESSION_HANDLE p11Session,
                            char * pClientCertLabel,
@@ -911,7 +969,7 @@ bool EstablishMqttSession( MQTTPublishCallback_t publishCallback,
     ( void ) memset( pMqttContext, 0U, sizeof( MQTTContext_t ) );
     ( void ) memset( pNetworkContext, 0U, sizeof( NetworkContext_t ) );
 
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
     returnStatus = connectToBrokerWithBackoffRetries( pNetworkContext,
                    p11Session,
                    pClientCertLabel,
@@ -938,7 +996,7 @@ bool EstablishMqttSession( MQTTPublishCallback_t publishCallback,
         transport.pNetworkContext = pNetworkContext;
 
 #ifdef KVS_USE_MBEDTLS
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
         transport.send = Mbedtls_Pkcs11_Send;
         transport.recv = Mbedtls_Pkcs11_Recv;
 #else
@@ -948,8 +1006,13 @@ bool EstablishMqttSession( MQTTPublishCallback_t publishCallback,
 #endif
 
 #ifdef KVS_USE_OPENSSL
+#ifdef KVS_USE_PKCS11
+        transport.send = Openssl_Pkcs11_Send;
+        transport.recv = Openssl_Pkcs11_Recv;
+#else
         transport.send = Openssl_Send;
         transport.recv = Openssl_Recv;
+#endif
 #endif
         transport.writev = NULL;
 
@@ -1084,7 +1147,7 @@ bool DisconnectMqttSession( void )
     }
 #ifdef KVS_USE_MBEDTLS
     /* End TLS session, then close TCP connection. */
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
     ( void ) Mbedtls_Pkcs11_Disconnect( pNetworkContext );
 #else
     ( void ) Mbedtls_Disconnect( pNetworkContext );
@@ -1092,7 +1155,11 @@ bool DisconnectMqttSession( void )
 #endif
 
 #ifdef KVS_USE_OPENSSL
+#ifdef KVS_USE_PKCS11
+    ( void ) Openssl_Pkcs11_Disconnect( pNetworkContext );
+#else
     ( void ) Openssl_Disconnect( pNetworkContext);
+#endif
 #endif
 
     return returnStatus;

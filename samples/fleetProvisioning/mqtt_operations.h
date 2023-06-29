@@ -26,9 +26,12 @@
 /* MQTT API header. */
 #include "core_mqtt.h"
 
-#ifdef ENABLE_PKCS11
-/* corePKCS11 include. */
+#ifdef KVS_USE_PKCS11
+#ifdef KVS_USE_MBEDTLS
 #include "core_pkcs11.h"
+#else if KVS_USE_OPENSSL
+#include <pkcs11.h>
+#endif
 #endif
 
 /**
@@ -52,7 +55,7 @@ typedef void (* MQTTPublishCallback_t )( MQTTPublishInfo_t * pPublishInfo,
  * @return true if an MQTT session is established;
  * false otherwise.
  */
-#ifdef ENABLE_PKCS11
+#ifdef KVS_USE_PKCS11
 bool EstablishMqttSession( MQTTPublishCallback_t publishCallback,
                            CK_SESSION_HANDLE p11Session,
                            char * pClientCertLabel,

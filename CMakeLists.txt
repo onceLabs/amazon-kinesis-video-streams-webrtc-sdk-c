@@ -9,8 +9,8 @@ project(KinesisVideoWebRTCClient LANGUAGES C)
 # User Flags
 option(ADD_MUCLIBC "Add -muclibc c flag" OFF)
 option(BUILD_DEPENDENCIES "Whether or not to build depending libraries from source" ON)
-option(USE_OPENSSL "Use openssl as crypto library" OFF)
-option(USE_MBEDTLS "Use mbedtls as crypto library" ON)
+option(USE_OPENSSL "Use openssl as crypto library" ON)
+option(USE_MBEDTLS "Use mbedtls as crypto library" OFF)
 option(BUILD_STATIC_LIBS "Build all libraries statically. (This includes third-party libraries.)" OFF)
 option(BUILD_OPENSSL_PLATFORM "If buildng OpenSSL what is the target platform" OFF)
 option(BUILD_LIBSRTP_HOST_PLATFORM "If buildng LibSRTP what is the current platform" OFF)
@@ -18,6 +18,7 @@ option(BUILD_LIBSRTP_DESTINATION_PLATFORM "If buildng LibSRTP what is the destin
 option(BUILD_SAMPLE "Build available samples" ON)
 option(ENABLE_DATA_CHANNEL "Enable support for data channel" ON)
 option(INSTRUMENTED_ALLOCATORS "Enable memory instrumentation" OFF)
+option(USE_PKCS11 "Use PKCS #11 " ON)
 
 # Developer Flags
 option(BUILD_TEST "Build the testing tree." OFF)
@@ -94,6 +95,10 @@ elseif(USE_MBEDTLS)
   # FIXME: there's probably a better way to inject MBEDTLS_USER_CONFIG_FILE flag without mutating the global CMAKE_C_FLAGS and CMAKE_CXX_FLAGS
   set(CMAKE_C_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/configs -DMBEDTLS_USER_CONFIG_FILE='<config_mbedtls.h>' ${CMAKE_C_FLAGS}")
   set(CMAKE_CXX_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/configs -DMBEDTLS_USER_CONFIG_FILE='<config_mbedtls.h>' ${CMAKE_CXX_FLAGS}")
+endif()
+
+if(USE_PKCS11)
+  add_definitions(-DKVS_USE_PKCS11)
 endif()
 
 if(BUILD_DEPENDENCIES)

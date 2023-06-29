@@ -86,34 +86,70 @@ file(GLOB LOGGING_HEADERS "${LIBRARIES_PATH}/logging-stack/*.h")
 file(COPY ${LOGGING_HEADERS} DESTINATION ${OPEN_SRC_INSTALL_PREFIX}/include)
 
 if(USE_OPENSSL)
-  list(APPEND INCLUDE_DIR
+  if(USE_PKCS11)
+    list(APPEND INCLUDE_DIR
       "./"
       "./fleetProvisioning/"
       "${CMAKE_CURRENT_LIST_DIR}"
       "${OPEN_SRC_INSTALL_PREFIX}/include/"
       "${FLEET_PROVISIONING_INCLUDE_PUBLIC_DIRS}"
-  )
+      "../libraries/posix/"
+    )
 
-  include_directories(${INCLUDE_DIR})
+    include_directories(${INCLUDE_DIR})
 
-  add_executable(
+    add_executable(
+      kvsWebRTCClientMasterWithProvisioning
+        Common.c
+        ${FLEET_PROVISIONING_SOURCES}
+        ./fleetProvisioning/fleet_provisioning_serializer.c
+        ./fleetProvisioning/fleet_provisioning_with_crt.c
+        ./fleetProvisioning/mqtt_operations.c
+        ../libraries/posix/openssl_pkcs11_posix.c
+        kvsWebRTCClientMasterWithProvisioning.c)
+
+      target_link_libraries(kvsWebRTCClientMasterWithProvisioning kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets
+                            tinycbor
+                            ${OPENSSL_SSL_LIBRARY}
+                            ${OPENSSL_CRYPTO_LIBRARY}
+                            crypto
+                            softhsm2
+                            sockets_posix
+                            clock_posix
+                            openssl_posix
+                            aws_iot_mqtt
+                            aws_iot_backoff_algorithm)
+  else()
+    list(APPEND INCLUDE_DIR
+      "./"
+      "./fleetProvisioning/"
+      "${CMAKE_CURRENT_LIST_DIR}"
+      "${OPEN_SRC_INSTALL_PREFIX}/include/"
+      "${FLEET_PROVISIONING_INCLUDE_PUBLIC_DIRS}"
+    )
+
+    message(WARNING ${INCLUDE_DIR})
+    include_directories(${INCLUDE_DIR})
+
+    add_executable(
     kvsWebRTCClientMasterWithProvisioning
-    Common.c
-    ${FLEET_PROVISIONING_SOURCES}
-    ./fleetProvisioning/fleet_provisioning_serializer.c
-    ./fleetProvisioning/fleet_provisioning_with_crt.c
-    ./fleetProvisioning/mqtt_operations.c
+      Common.c
+      ${FLEET_PROVISIONING_SOURCES}
+      ./fleetProvisioning/fleet_provisioning_serializer.c
+      ./fleetProvisioning/fleet_provisioning_with_crt.c
+      ./fleetProvisioning/mqtt_operations.c
     kvsWebRTCClientMasterWithProvisioning.c)
 
-  target_link_libraries(kvsWebRTCClientMasterWithProvisioning kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets
-                        tinycbor
-                        ${OPENSSL_SSL_LIBRARY}
-                        ${OPENSSL_CRYPTO_LIBRARY}
-                        sockets_posix
-                        clock_posix
-			openssl_posix
-                        aws_iot_mqtt
-                        aws_iot_backoff_algorithm)
+    target_link_libraries(kvsWebRTCClientMasterWithProvisioning kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets
+                          tinycbor
+                          ${OPENSSL_SSL_LIBRARY}
+                          ${OPENSSL_CRYPTO_LIBRARY}
+                          sockets_posix
+                          clock_posix
+                          openssl_posix
+                          aws_iot_mqtt
+                          aws_iot_backoff_algorithm)
+  endif()
 
 elseif(USE_MBEDTLS)
 

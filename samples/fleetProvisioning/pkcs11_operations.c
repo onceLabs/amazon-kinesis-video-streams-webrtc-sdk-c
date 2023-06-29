@@ -639,11 +639,11 @@ static CK_RV provisionCertificate( CK_SESSION_HANDLE session,
 
 /*-----------------------------------------------------------*/
 
-bool loadClaimCredentials( CK_SESSION_HANDLE p11Session,
-                           const char * pClaimCertPath,
-                           const char * pClaimCertLabel,
-                           const char * pClaimPrivKeyPath,
-                           const char * pClaimPrivKeyLabel )
+bool loadClaimCredentialsAndKey( CK_SESSION_HANDLE p11Session,
+                                 const char * pClaimCertPath,
+                                 const char * pClaimCertLabel,
+                                 const char * pClaimPrivKeyPath,
+                                 const char * pClaimPrivKeyLabel )
 {
     bool status;
     STATUS retStatus = STATUS_SUCCESS;
@@ -662,13 +662,13 @@ bool loadClaimCredentials( CK_SESSION_HANDLE p11Session,
                           &claimCertLength );
 
     if (retStatus != STATUS_SUCCESS) {
-        DLOGE("loadClaimCredentials(): readFile returned status code: 0x%08x \n", retStatus);
+        DLOGE("loadClaimCredentialsAndKey(): readFile returned status code: 0x%08x \n", retStatus);
     } else {
         retStatus = readFile( pClaimPrivKeyPath, TRUE, claimPrivateKey,
                               &claimPrivateKeyLength );
     }
     if (retStatus != STATUS_SUCCESS) {
-        DLOGE("loadClaimCredentials(): readFile returned status code: 0x%08x \n", retStatus);
+        DLOGE("loadClaimCredentialsAndKey(): readFile returned status code: 0x%08x \n", retStatus);
     }
 
     if ( retStatus == STATUS_SUCCESS ) {

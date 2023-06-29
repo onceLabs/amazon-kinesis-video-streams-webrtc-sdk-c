@@ -49,7 +49,7 @@
  *
  * @return True on success.
  */
-bool loadClaimCredentials( CK_SESSION_HANDLE p11Session,
+bool loadClaimCredentialsAndKey( CK_SESSION_HANDLE p11Session,
                            const char * pClaimCertPath,
                            const char * pClaimCertLabel,
                            const char * pClaimPrivKeyPath,
