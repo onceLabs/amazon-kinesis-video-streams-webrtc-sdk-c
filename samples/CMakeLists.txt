@@ -58,6 +58,11 @@ add_executable(
 target_link_libraries(kvsWebrtcClientViewer kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets)
 
 add_executable(
+  https_server
+  https_server.c)
+target_link_libraries(https_server kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets ssl crypto pthread)
+
+add_executable(
         discoverNatBehavior
         discoverNatBehavior.c)
 target_link_libraries(discoverNatBehavior kvsWebrtcClient)
