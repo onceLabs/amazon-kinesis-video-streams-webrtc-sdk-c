@@ -59,6 +59,13 @@ extern "C" {
 // comment out this line to disable the feature
 #define KVS_USE_SIGNALING_CHANNEL_THREADPOOL 1
 
+#ifdef USE_CACHE_FRAME
+#define VIDEO_SEND_CACHE_FRAME_SIZE    100
+#define AUDIO_SEND_CACHE_FRAME_SIZE    200
+#define AUDIO_RECEIVE_BUFFUER_MAX_SIZE 100
+#define VIDEO_RECEIVE_BUFFUER_MAX_SIZE 200
+#endif
+
 /* Uncomment the following line in order to enable IoT credentials checks in the provided samples */
 // #define IOT_CORE_ENABLE_CREDENTIALS  1
 
@@ -84,6 +91,20 @@ typedef struct {
     UINT64 prevPacketsDiscardedOnSend;
     UINT64 prevTs;
 } RtcMetricsHistory, *PRtcMetricsHistory;
+
+#ifdef USE_CACHE_FRAME
+typedef struct {
+    UINT32 nextConsumedFrameId;
+    UINT32 lastConsumedFrameId;
+    UINT32 headerFrameId;
+    UINT32 tailFrameId;
+    MUTEX mutex;
+    CVAR cond;
+    BOOL recvFlag;
+    UINT16 maxSize;
+    PDoubleList pFrameList;
+} FrameBuffer, *PFrameBuffer;
+#endif
 
 typedef struct {
     volatile ATOMIC_BOOL appTerminateFlag;
@@ -165,6 +186,19 @@ struct __SampleStreamingSession {
     RtcMetricsHistory rtcMetricsHistory;
     BOOL remoteCanTrickleIce;
 
+#ifdef USE_CACHE_FRAME
+    TID audioProcessTid;
+    TID videoProcessTid;
+    TID audioConsumerTid;
+    TID videoConsumerTid;
+    PFrameBuffer pCacheAudioFrame;
+    PFrameBuffer pCacheVideoFrame;
+    PFrameBuffer pAudioRecvBuf;
+    PFrameBuffer pVideoRecvBuf;
+    volatile ATOMIC_BOOL audioRecvBufInit;
+    volatile ATOMIC_BOOL videoRecvBufInit;
+#endif
+
     // this is called when the SampleStreamingSession is being freed
     StreamSessionShutdownCallback shutdownCallback;
     UINT64 shutdownCallbackCustomData;
@@ -172,6 +206,19 @@ struct __SampleStreamingSession {
     PeerConnectionMetrics peerConnectionMetrics;
     KvsIceAgentMetrics iceMetrics;
 };
+
+#ifdef USE_CACHE_FRAME
+PFrameBuffer initFrameBuffer(BOOL, UINT16);
+STATUS deInitFrameBuffer(BOOL, PFrameBuffer);
+STATUS pushFrame(PFrameBuffer, PFrame);
+STATUS popFrame(PFrameBuffer, PFrame*);
+STATUS deleteFrame(PFrameBuffer, PFrame);
+
+PVOID processAudioPackets(PVOID);
+PVOID processVideoPackets(PVOID);
+PVOID audioConsumerRoutin(PVOID);
+PVOID videoConsumerRoutin(PVOID);
+#endif
 
 VOID sigintHandler(INT32);
 STATUS readFrameFromDisk(PBYTE, PUINT32, PCHAR);

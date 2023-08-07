@@ -157,6 +157,9 @@ PVOID sendVideoPackets(PVOID args)
         frame.presentationTs += SAMPLE_VIDEO_FRAME_DURATION;
         MUTEX_LOCK(pSampleConfiguration->streamingSessionListReadLock);
         for (i = 0; i < pSampleConfiguration->streamingSessionCount; ++i) {
+#ifdef USE_CACHE_FRAME
+            pushFrame(pSampleConfiguration->sampleStreamingSessionList[i]->pCacheVideoFrame, &frame);
+#else
             status = writeFrame(pSampleConfiguration->sampleStreamingSessionList[i]->pVideoRtcRtpTransceiver, &frame);
             if (pSampleConfiguration->sampleStreamingSessionList[i]->firstFrame && status == STATUS_SUCCESS) {
                 PROFILE_WITH_START_TIME(pSampleConfiguration->sampleStreamingSessionList[i]->offerReceiveTime, "Time to first frame");
@@ -169,6 +172,7 @@ PVOID sendVideoPackets(PVOID args)
                     DLOGV("writeFrame() failed with 0x%08x", status);
                 }
             }
+#endif
         }
         MUTEX_UNLOCK(pSampleConfiguration->streamingSessionListReadLock);
 
@@ -197,9 +201,12 @@ PVOID sendAudioPackets(PVOID args)
     CHAR filePath[MAX_PATH_LEN + 1];
     UINT32 i;
     STATUS status;
+    UINT64 startTime, lastFrameTime, elapsed;
 
     CHK_ERR(pSampleConfiguration != NULL, STATUS_NULL_ARG, "[KVS Master] Streaming session is NULL");
     frame.presentationTs = 0;
+    startTime = GETTIME();
+    lastFrameTime = startTime;
 
     while (!ATOMIC_LOAD_BOOL(&pSampleConfiguration->appTerminateFlag)) {
         fileIndex = fileIndex % NUMBER_OF_OPUS_FRAME_FILES + 1;
@@ -223,6 +230,9 @@ PVOID sendAudioPackets(PVOID args)
 
         MUTEX_LOCK(pSampleConfiguration->streamingSessionListReadLock);
         for (i = 0; i < pSampleConfiguration->streamingSessionCount; ++i) {
+#ifdef USE_CACHE_FRAME
+            pushFrame(pSampleConfiguration->sampleStreamingSessionList[i]->pCacheAudioFrame, &frame);
+#else
             status = writeFrame(pSampleConfiguration->sampleStreamingSessionList[i]->pAudioRtcRtpTransceiver, &frame);
             if (status != STATUS_SRTP_NOT_READY_YET) {
                 if (status != STATUS_SUCCESS) {
@@ -232,9 +242,13 @@ PVOID sendAudioPackets(PVOID args)
                     pSampleConfiguration->sampleStreamingSessionList[i]->firstFrame = FALSE;
                 }
             }
+#endif
         }
         MUTEX_UNLOCK(pSampleConfiguration->streamingSessionListReadLock);
-        THREAD_SLEEP(SAMPLE_AUDIO_FRAME_DURATION);
+
+        elapsed = lastFrameTime - startTime;
+        THREAD_SLEEP(SAMPLE_AUDIO_FRAME_DURATION - elapsed % SAMPLE_AUDIO_FRAME_DURATION);
+        lastFrameTime = GETTIME();
     }
 
 CleanUp:

@@ -170,6 +170,154 @@ CleanUp:
     return retStatus;
 }
 
+#ifdef USE_CACHE_FRAME
+PVOID processVideoPackets(PVOID args)
+{
+    STATUS retStatus = STATUS_SUCCESS;
+    PSampleStreamingSession pSampleStreamingSession = (PSampleStreamingSession) args;
+    PFrame pFrame = NULL;
+    STATUS status;
+    UINT32 i;
+    RtcEncoderStats encoderStats;
+
+    MEMSET(&encoderStats, 0x00, SIZEOF(RtcEncoderStats));
+
+    while (!ATOMIC_LOAD_BOOL(&pSampleStreamingSession->terminateFlag)) {
+        // based on bitrate of samples/h264SampleFrames/frame-*
+        encoderStats.width = 640;
+        encoderStats.height = 480;
+        encoderStats.targetBitrate = 262000;
+
+        status = popFrame(pSampleStreamingSession->pCacheVideoFrame, &pFrame);
+        if (STATUS_SUCCESS == status) {
+            status = writeFrame(pSampleStreamingSession->pVideoRtcRtpTransceiver, pFrame);
+            if (pSampleStreamingSession->firstFrame && status == STATUS_SUCCESS) {
+                PROFILE_WITH_START_TIME(pSampleStreamingSession->offerReceiveTime, "Time to first frame");
+                pSampleStreamingSession->firstFrame = FALSE;
+            }
+            encoderStats.encodeTimeMsec = 4; // update encode time to an arbitrary number to demonstrate stats update
+            updateEncoderStats(pSampleStreamingSession->pVideoRtcRtpTransceiver, &encoderStats);
+            if (status != STATUS_SRTP_NOT_READY_YET) {
+                if (status != STATUS_SUCCESS) {
+                    DLOGV("writeFrame() failed with 0x%08x", status);
+                }
+                else
+                {
+                    deleteFrame(pSampleStreamingSession->pCacheVideoFrame, pFrame);
+                }
+            }
+            else
+            {
+                deleteFrame(pSampleStreamingSession->pCacheVideoFrame, pFrame); // Discard packets till SRTP is ready
+            }
+        }
+    }
+
+CleanUp:
+    DLOGI("[KVS Master] closing process video thread");
+    return (PVOID) (ULONG_PTR) retStatus;
+}
+
+PVOID processAudioPackets(PVOID args)
+{
+    STATUS retStatus = STATUS_SUCCESS;
+    PSampleStreamingSession pSampleStreamingSession = (PSampleStreamingSession) args;
+    PFrame pFrame = NULL;
+    STATUS status;
+    UINT32 i;
+
+    while (!ATOMIC_LOAD_BOOL(&pSampleStreamingSession->terminateFlag)) {
+        status = popFrame(pSampleStreamingSession->pCacheAudioFrame, &pFrame);
+        if (STATUS_SUCCESS == status) {
+            status = writeFrame(pSampleStreamingSession->pAudioRtcRtpTransceiver, pFrame);
+            if (pSampleStreamingSession->firstFrame && status == STATUS_SUCCESS) {
+                PROFILE_WITH_START_TIME(pSampleStreamingSession->offerReceiveTime, "Time to first frame");
+                pSampleStreamingSession->firstFrame = FALSE;
+            }
+            if (status != STATUS_SRTP_NOT_READY_YET) {
+                if (status != STATUS_SUCCESS) {
+                    DLOGV("writeFrame() failed with 0x%08x", status);
+                } else {
+                    deleteFrame(pSampleStreamingSession->pCacheAudioFrame, pFrame);
+                }
+            }
+            else
+            {
+                deleteFrame(pSampleStreamingSession->pCacheAudioFrame, pFrame); // Discard packets till SRTP is ready
+            }
+        }
+    }
+
+CleanUp:
+    DLOGI("[KVS Master] closing process audio thread");
+    return (PVOID) (ULONG_PTR) retStatus;
+}
+
+PVOID audioConsumerRoutin(PVOID args)
+{
+    STATUS retStatus = STATUS_SUCCESS;
+    PSampleStreamingSession pSampleStreamingSession = (PSampleStreamingSession) args;
+    PFrame pFrame = NULL;
+    UINT64 startTime, lastFrameTime, elapsed;
+
+    CHK(pSampleStreamingSession != NULL, STATUS_NULL_ARG);
+    startTime = GETTIME();
+    lastFrameTime = startTime;
+
+    while (!ATOMIC_LOAD_BOOL(&pSampleStreamingSession->terminateFlag)) {
+        if (ATOMIC_LOAD_BOOL(&pSampleStreamingSession->audioRecvBufInit)) {
+            retStatus = popFrame(pSampleStreamingSession->pAudioRecvBuf, &pFrame);
+            if (retStatus == STATUS_SUCCESS) {
+                DLOGV("popFrame ID = %05u, time=%llu\n", pFrame->index, GETTIME() / HUNDREDS_OF_NANOS_IN_A_MILLISECOND);
+                // You can copy the pFrame data to process, otherwise it will be deleted in calling deleteFrame
+                deleteFrame(pSampleStreamingSession->pAudioRecvBuf, pFrame);
+            }
+        }
+        elapsed = lastFrameTime - startTime;
+        THREAD_SLEEP(SAMPLE_AUDIO_FRAME_DURATION - elapsed % SAMPLE_AUDIO_FRAME_DURATION);
+        lastFrameTime = GETTIME();
+    }
+
+CleanUp:
+    DLOGI("[KVS Viewer] closing audio consumer thread");
+    CHK_LOG_ERR(retStatus);
+
+    return (PVOID) (ULONG_PTR) retStatus;
+}
+
+PVOID videoConsumerRoutin(PVOID args)
+{
+    STATUS retStatus = STATUS_SUCCESS;
+    PSampleStreamingSession pSampleStreamingSession = (PSampleStreamingSession) args;
+    PFrame pFrame = NULL;
+    UINT64 startTime, lastFrameTime, elapsed;
+
+    CHK(pSampleStreamingSession != NULL, STATUS_NULL_ARG);
+    startTime = GETTIME();
+    lastFrameTime = startTime;
+
+    while (!ATOMIC_LOAD_BOOL(&pSampleStreamingSession->terminateFlag)) {
+        if (ATOMIC_LOAD_BOOL(&pSampleStreamingSession->videoRecvBufInit)) {
+            retStatus = popFrame(pSampleStreamingSession->pVideoRecvBuf, &pFrame);
+            if (retStatus == STATUS_SUCCESS) {
+                DLOGV("popFrame ID = %05u, time=%llu\n", pFrame->index, GETTIME() / HUNDREDS_OF_NANOS_IN_A_MILLISECOND);
+                // You can copy the pFrame data to process, otherwise it will be deleted in calling deleteFrame
+                deleteFrame(pSampleStreamingSession->pVideoRecvBuf, pFrame);
+            }
+        }
+        elapsed = lastFrameTime - startTime;
+        THREAD_SLEEP(SAMPLE_VIDEO_FRAME_DURATION - elapsed % SAMPLE_VIDEO_FRAME_DURATION);
+        lastFrameTime = GETTIME();
+    }
+
+CleanUp:
+    DLOGI("[KVS Viewer] closing video consumer thread");
+    CHK_LOG_ERR(retStatus);
+
+    return (PVOID) (ULONG_PTR) retStatus;
+}
+#endif
+
 PVOID mediaSenderRoutine(PVOID customData)
 {
     STATUS retStatus = STATUS_SUCCESS;
@@ -541,6 +689,17 @@ STATUS createSampleStreamingSession(PSampleConfiguration pSampleConfiguration, P
     CHK_STATUS(peerConnectionOnSenderBandwidthEstimation(pSampleStreamingSession->pPeerConnection, (UINT64) pSampleStreamingSession,
                                                          sampleSenderBandwidthEstimationHandler));
     pSampleStreamingSession->startUpLatency = 0;
+
+#ifdef USE_CACHE_FRAME
+    ATOMIC_STORE_BOOL(&pSampleStreamingSession->audioRecvBufInit, FALSE);
+    ATOMIC_STORE_BOOL(&pSampleStreamingSession->videoRecvBufInit, FALSE);
+    pSampleStreamingSession->pCacheAudioFrame = initFrameBuffer(FALSE, AUDIO_SEND_CACHE_FRAME_SIZE);
+    pSampleStreamingSession->pCacheVideoFrame = initFrameBuffer(FALSE, VIDEO_SEND_CACHE_FRAME_SIZE);
+    THREAD_CREATE(&pSampleStreamingSession->audioConsumerTid, audioConsumerRoutin, (PVOID) pSampleStreamingSession);
+    THREAD_CREATE(&pSampleStreamingSession->videoConsumerTid, videoConsumerRoutin, (PVOID) pSampleStreamingSession);
+    THREAD_CREATE(&pSampleStreamingSession->audioProcessTid, processAudioPackets, (PVOID) pSampleStreamingSession);
+    THREAD_CREATE(&pSampleStreamingSession->videoProcessTid, processVideoPackets, (PVOID) pSampleStreamingSession);
+#endif
 CleanUp:
 
     if (STATUS_FAILED(retStatus) && pSampleStreamingSession != NULL) {
@@ -577,6 +736,29 @@ STATUS freeSampleStreamingSession(PSampleStreamingSession* ppSampleStreamingSess
     if (IS_VALID_TID_VALUE(pSampleStreamingSession->receiveAudioVideoSenderTid)) {
         THREAD_JOIN(pSampleStreamingSession->receiveAudioVideoSenderTid, NULL);
     }
+
+#ifdef USE_CACHE_FRAME
+    deInitFrameBuffer(FALSE, pSampleStreamingSession->pCacheAudioFrame);
+    deInitFrameBuffer(FALSE, pSampleStreamingSession->pCacheVideoFrame);
+    deInitFrameBuffer(TRUE, pSampleStreamingSession->pAudioRecvBuf);
+    deInitFrameBuffer(TRUE, pSampleStreamingSession->pVideoRecvBuf);
+
+    if (IS_VALID_TID_VALUE(pSampleStreamingSession->audioProcessTid)) {
+        THREAD_JOIN(pSampleStreamingSession->audioProcessTid, NULL);
+    }
+
+    if (IS_VALID_TID_VALUE(pSampleStreamingSession->videoProcessTid)) {
+        THREAD_JOIN(pSampleStreamingSession->videoProcessTid, NULL);
+    }
+
+    if (IS_VALID_TID_VALUE(pSampleStreamingSession->audioConsumerTid)) {
+        THREAD_JOIN(pSampleStreamingSession->audioConsumerTid, NULL);
+    }
+
+    if (IS_VALID_TID_VALUE(pSampleStreamingSession->videoConsumerTid)) {
+        THREAD_JOIN(pSampleStreamingSession->videoConsumerTid, NULL);
+    }
+#endif
 
     // De-initialize the session stats timer if there are no active sessions
     // NOTE: we need to perform this under the lock which might be acquired by
@@ -620,12 +802,32 @@ VOID sampleVideoFrameHandler(UINT64 customData, PFrame pFrame)
 {
     UNUSED_PARAM(customData);
     DLOGV("Video Frame received. TrackId: %" PRIu64 ", Size: %u, Flags %u", pFrame->trackId, pFrame->size, pFrame->flags);
+#ifdef USE_CACHE_FRAME
+    PSampleStreamingSession pSampleStreamingSession = (PSampleStreamingSession) customData;
+    if (!ATOMIC_LOAD_BOOL(&pSampleStreamingSession->videoRecvBufInit)) {
+        pSampleStreamingSession->pVideoRecvBuf = initFrameBuffer(TRUE, AUDIO_RECEIVE_BUFFUER_MAX_SIZE);
+        pushFrame(pSampleStreamingSession->pVideoRecvBuf, pFrame);
+        ATOMIC_STORE_BOOL(&pSampleStreamingSession->videoRecvBufInit, TRUE);
+    } else {
+        pushFrame(pSampleStreamingSession->pVideoRecvBuf, pFrame);
+    }
+#endif
 }
 
 VOID sampleAudioFrameHandler(UINT64 customData, PFrame pFrame)
 {
     UNUSED_PARAM(customData);
     DLOGV("Audio Frame received. TrackId: %" PRIu64 ", Size: %u, Flags %u", pFrame->trackId, pFrame->size, pFrame->flags);
+#ifdef USE_CACHE_FRAME
+    PSampleStreamingSession pSampleStreamingSession = (PSampleStreamingSession) customData;
+    if (!ATOMIC_LOAD_BOOL(&pSampleStreamingSession->audioRecvBufInit)) {
+        pSampleStreamingSession->pAudioRecvBuf = initFrameBuffer(TRUE, AUDIO_RECEIVE_BUFFUER_MAX_SIZE);
+        pushFrame(pSampleStreamingSession->pAudioRecvBuf, pFrame);
+        ATOMIC_STORE_BOOL(&pSampleStreamingSession->audioRecvBufInit, TRUE);
+    } else {
+        pushFrame(pSampleStreamingSession->pAudioRecvBuf, pFrame);
+    }
+#endif
 }
 
 VOID sampleBandwidthEstimationHandler(UINT64 customData, DOUBLE maximumBitrate)

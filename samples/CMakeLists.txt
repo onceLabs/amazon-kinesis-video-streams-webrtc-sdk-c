@@ -45,16 +45,36 @@ link_directories(${OPEN_SRC_INSTALL_PREFIX}/lib)
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/opusSampleFrames" DESTINATION .)
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/h264SampleFrames" DESTINATION .)
 
-add_executable(
-  kvsWebrtcClientMaster
-  Common.c
-  kvsWebRTCClientMaster.c)
+if(USE_CACHE_FRAME)
+  add_definitions(-DUSE_CACHE_FRAME)
+endif()
+
+if(USE_CACHE_FRAME)
+  add_executable(
+    kvsWebrtcClientMaster
+    CacheData.c
+    Common.c
+    kvsWebRTCClientMaster.c)
+else()
+  add_executable(
+    kvsWebrtcClientMaster
+    Common.c
+    kvsWebRTCClientMaster.c)
+endif()
 target_link_libraries(kvsWebrtcClientMaster kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets)
 
-add_executable(
-  kvsWebrtcClientViewer
-  Common.c
-  kvsWebRTCClientViewer.c)
+if(USE_CACHE_FRAME)
+  add_executable(
+    kvsWebrtcClientViewer
+    CacheData.c
+    Common.c
+    kvsWebRTCClientViewer.c)
+else()
+  add_executable(
+    kvsWebrtcClientViewer
+    Common.c
+    kvsWebRTCClientViewer.c)
+endif()
 target_link_libraries(kvsWebrtcClientViewer kvsWebrtcClient kvsWebrtcSignalingClient kvsCommonLws kvspicUtils websockets)
 
 add_executable(
@@ -63,11 +83,18 @@ add_executable(
 target_link_libraries(discoverNatBehavior kvsWebrtcClient)
 
 if(GST_FOUND)
-  add_executable(
-    kvsWebrtcClientMasterGstSample
-    Common.c
-    kvsWebrtcClientMasterGstSample.c
-  )
+  if(USE_CACHE_FRAME)
+    add_executable(
+      kvsWebrtcClientMasterGstSample
+      CacheData.c
+      Common.c
+      kvsWebrtcClientMasterGstSample.c)
+  else()
+    add_executable(
+      kvsWebrtcClientMasterGstSample
+      Common.c
+      kvsWebrtcClientMasterGstSample.c)
+  endif()
   target_link_libraries(kvsWebrtcClientMasterGstSample kvsWebrtcClient kvsWebrtcSignalingClient ${GST_SAMPLE_LIBRARIES} kvsCommonLws kvspicUtils websockets)
 
   install(TARGETS kvsWebrtcClientMasterGstSample

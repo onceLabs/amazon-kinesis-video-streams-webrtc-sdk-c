@@ -30,6 +30,7 @@ option(MEMORY_SANITIZER "Build with MemorySanitizer." OFF)
 option(THREAD_SANITIZER "Build with ThreadSanitizer." OFF)
 option(UNDEFINED_BEHAVIOR_SANITIZER "Build with UndefinedBehaviorSanitizer." OFF)
 option(LINK_PROFILER "Link gperftools profiler" OFF)
+option(USE_CACHE_FRAME "Use cache frame" ON)
 
 if(WIN32)
   set(EXT_PTHREAD_INCLUDE_DIR "" CACHE PATH "Path to the PThread dir")
