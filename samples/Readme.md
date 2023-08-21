@@ -96,166 +96,9 @@
 |     | pBuf：指向Frame Buffer所占内存的指针                           |
 | 返回值  | STATUS_SUCCESS：执行成功；其他 ：失败                          |
 
+# 2. **接收端处理**
 
-# 2. **发送端处理**
-
-## 2.1 **原始的发送端实现**
-
-![](img/image1.jpeg)
-
-原始sample中，第一次连接时会启动两个数据发送线程sendAudioPackets和sendVideoPackets，这两个线程一旦启动后即不会关闭。以sendVideoPackets为例，每间隔40ms发送一次数据，每次发送数据都分为两步：
-
-1.  调用readFrameFromDisk从文件读取一帧
-
-2.  通过writeFrame发送到socket，这里注意for (i = 0; i <
-    pSampleConfiguration->streamingSessionCount;
-    ++i)，连接了几个session（也就是连接了几个viewer），每帧数据就要循环发送几次；
-
-这里就会存在几个问题：
-
-1.  发送的数据不缓存，如果某帧发送失败，那么该帧就丢掉了，接收掉看到就是有掉帧现象
-
-2.  当几个session同时连接时，发送数据是线性发送的，一个session网络状况不佳，发送数据耗时长，会直接影响到所有session数据的发送
-
-```C
-  PVOID sendVideoPackets(PVOID args)
-  {
-	  ......
-	  while (!ATOMIC_LOAD_BOOL(&pSampleConfiguration->appTerminateFlag)) {
-		  fileIndex = fileIndex % NUMBER_OF_H264_FRAME_FILES + 1;
-		  SNPRINTF(filePath, MAX_PATH_LEN, "./h264SampleFrames/frame-%04d.h264", fileIndex);
-		  
-		  CHK_STATUS(readFrameFromDisk(NULL, &frameSize, filePath));
-		  
-		  // Re-alloc if needed
-		  if (frameSize > pSampleConfiguration->videoBufferSize) {
-			  pSampleConfiguration->pVideoFrameBuffer = (PBYTE) MEMREALLOC(pSampleConfiguration->pVideoFrameBuffer, frameSize);
-			  CHK_ERR(pSampleConfiguration->pVideoFrameBuffer != NULL, STATUS_NOT_ENOUGH_MEMORY, "[KVS Master] Failed to allocate video frame buffer");
-			  pSampleConfiguration->videoBufferSize = frameSize;
-		  }
-		  
-		  frame.frameData = pSampleConfiguration->pVideoFrameBuffer;
-		  frame.size = frameSize;
-		  
-		  CHK_STATUS(readFrameFromDisk(frame.frameData, &frameSize, filePath));
-		  
-		  // based on bitrate of samples/h264SampleFrames/frame-*
-		  encoderStats.width = 640;
-		  encoderStats.height = 480;
-		  encoderStats.targetBitrate = 262000;
-		  frame.presentationTs += SAMPLE_VIDEO_FRAME_DURATION;
-		  MUTEX_LOCK(pSampleConfiguration->streamingSessionListReadLock);
-		  for (i = 0; i < pSampleConfiguration->streamingSessionCount; ++i) {
-			  status = writeFrame(pSampleConfiguration->sampleStreamingSessionList[i]->pVideoRtcRtpTransceiver, &frame);
-			  if (pSampleConfiguration->sampleStreamingSessionList[i]->firstFrame && status == STATUS_SUCCESS) {
-				  PROFILE_WITH_START_TIME(pSampleConfiguration->sampleStreamingSessionList[i]->offerReceiveTime, "Time to first frame");
-				  pSampleConfiguration->sampleStreamingSessionList[i]->firstFrame = FALSE;
-			  }
-			  encoderStats.encodeTimeMsec = 4; // update encode time to an arbitrary number to demonstrate stats update
-			  updateEncoderStats(pSampleConfiguration->sampleStreamingSessionList[i]->pVideoRtcRtpTransceiver, &encoderStats);
-			  if (status != STATUS_SRTP_NOT_READY_YET) {
-				  if (status != STATUS_SUCCESS) {
-					  DLOGV("writeFrame() failed with 0x%08x", status);
-				  }
-			  }
-		  }
-		  MUTEX_UNLOCK(pSampleConfiguration->streamingSessionListReadLock);
-		  
-		  // Adjust sleep in the case the sleep itself and writeFrame take longer than expected. Since sleep makes sure that the thread
-		  // will be paused at least until the given amount, we can assume that there's no too early frame scenario.
-		  // Also, it's very unlikely to have a delay greater than SAMPLE_VIDEO_FRAME_DURATION, so the logic assumes that this is always
-		  // true for simplicity.
-		  elapsed = lastFrameTime - startTime;
-		  THREAD_SLEEP(SAMPLE_VIDEO_FRAME_DURATION - elapsed % SAMPLE_VIDEO_FRAME_DURATION);
-		  lastFrameTime = GETTIME();
-	  }
-  }
-
-```
-
-## 2.2 **添加数据缓存后的发送端实现**
-
-![](img/image2.jpeg)
-
-1.  在接收到Viewer端的SDP OFFER后，调用createSampleStreamingSession创建session，在createSampleStreamingSession中分别初始化video和audio的缓存buffer，同时创建两个处理线程process VideoPackets和process AudioPackets；这样每个session都有自己的缓冲buffer及处理线程，互不影响；这里video的FrameBuffer长度设为100，audio的FrameBuffer长度设为200；因为video是每秒25帧，audio是每秒50帧，如此设置，即大概缓存4s中的音视频数据；
-
-2.  在sendVideoPackets中，每40ms读取一帧视频数据，将数据插入到每个session的缓存buffer中；
-
-3.  在process VideoPackets处理时，只要对应的FrameBuffer中有数据，就通过popFrame获取一帧，经writeFrame发送到socket；发送成功后，会从FrameBuffer中清除该帧；如果该帧发送失败，该帧不清除，继续尝试发送；
-
-```C
-  PVOID sendVideoPackets(PVOID args)
-  {
-	  ......
-	  while (!ATOMIC_LOAD_BOOL(&pSampleConfiguration->appTerminateFlag)) {
-		  ......
-		  for (i = 0; i < pSampleConfiguration->streamingSessionCount; ++i) {
-			pushFrame(pSampleConfiguration->sampleStreamingSessionList[i]->pCacheVideoFrame, &frame);
-		  }
-	  }
-	  ......
-  }
-  
-  PVOID processVideoPackets(PVOID args)
-  {
-	  ......
-	  while (!ATOMIC_LOAD_BOOL(&pSampleStreamingSession->terminateFlag)) {
-		  // based on bitrate of samples/h264SampleFrames/frame-*
-		  encoderStats.width = 640;
-		  encoderStats.height = 480;
-		  encoderStats.targetBitrate = 262000;
-		  
-		  status = popFrame(pSampleStreamingSession->pCacheVideoFrame, &pFrame);
-		  if (STATUS_SUCCESS == status) {
-			  status = writeFrame(pSampleStreamingSession->pVideoRtcRtpTransceiver, pFrame);
-			  if (pSampleStreamingSession->firstFrame && status == STATUS_SUCCESS) {
-				  PROFILE_WITH_START_TIME(pSampleStreamingSession->offerReceiveTime, "Time to first frame");
-				  pSampleStreamingSession->firstFrame = FALSE;
-			  }
-			  encoderStats.encodeTimeMsec = 4; // update encode time to an arbitrary number to demonstrate stats update
-			  updateEncoderStats(pSampleStreamingSession->pVideoRtcRtpTransceiver, &encoderStats);
-			  if (status != STATUS_SRTP_NOT_READY_YET) {
-				  if (status != STATUS_SUCCESS) {
-					  DLOGV("writeFrame() failed with 0x%08x", status);
-				  } else {
-					  deleteFrame(pSampleStreamingSession->pCacheVideoFrame, pFrame);
-				  }
-			  } else {
-				  deleteFrame(pSampleStreamingSession->pCacheVideoFrame, pFrame); // Discard packets till SRTP is ready
-			  }
-		  }
-	  }
-	  ......
-  }
-
-```
-
-## 2.3 **缓冲数据后的测试结果**
-
-测试方法：
-
-1.  同一局域网环境，准备一个Ubuntu机器，一个windows笔记本，一个手机，连接到一个路由器上
-
-2.  Ubuntu机器运行kvsWebRtcClientMaster
-
-3.  分别在Ubuntu机器上的浏览器（channel1），windows笔记本浏览器（channel2），和手机浏览器（channel3）
-    运行testpage(https://awslabs.github.io/amazon-kinesis-video-streams-webrtc-sdk-js/examples/index.html)
-
-4.  当三个Viewer都显示出音视频后，播放一会，可以将路由器远离Ubuntu设备，制造一种Master的弱网环境，测试出的帧缓存如下：
-
-![](img/image3.png)
-
-channel1基本无缓存，生产一帧数据，即发送一帧数据；
-
-![](img/image4.png)
-
-![](img/image5.png)
-
-channel2和channel3都会根据网络的情况产生一些缓存buffer，当网络恢复时，缓冲帧会逐步发送。
-
-# 3. **接收端处理**
-
-## 3.1 **原有的接收端处理过程如下：**
+## 2.1 **原有的接收端处理过程如下：**
 
 1.  socket receive从网络上接收帧数据，并且通过JitterBuffer后，获得到完整的数据帧；
 
@@ -265,7 +108,7 @@ channel2和channel3都会根据网络的情况产生一些缓存buffer，当网�
 
 ![](img/image6.jpeg)
 
-## 3.2 **添加FrameBuffer模块后，接收端的处理如下**
+## 2.2 **添加FrameBuffer模块后，接收端的处理如下**
 
 1.  socket receive从网络上接收帧数据，并且通过JitterBuffer后，获得到完整的数据帧；
 
@@ -279,7 +122,7 @@ channel2和channel3都会根据网络的情况产生一些缓存buffer，当网�
 
 ![](img/image7.jpeg)
 
-## 3.3 **帧乱序的处理**
+## 2.3 **帧乱序的处理**
 
 发送端按照顺序发送数据帧。但是帧被发送到网络中后，由于网络的路由等处理，接收端不能保证接收到的数据帧一定是按照发送顺序接收到的，所以在接收到数据帧后，需要将新接收到的帧放到正确的位置，以保证帧的有序性。
 
@@ -364,6 +207,176 @@ list），按照如下方式创建
   }
 
 ```
+## 2.4 **缓冲数据后的测试结果**
+
+测试方法：
+
+1.  不同局域网环境，准备一个Ubuntu机器，一个windows笔记本，一个手机，连接到一个路由器上
+
+2.  Ubuntu机器运行kvsWebRtcClientMaster
+
+3.  在手机浏览器运行 [Testpage Viwer](https://awslabs.github.io/amazon-kinesis-video-streams-webrtc-sdk-js/examples/index.html)
+
+4.  当Viewer显示出音视频后，播放一会，可以将路由器远离Ubuntu设备，制造一种Master的弱网环境，测试出的帧缓存如下：
+![](img/image8.jpg)
+5. kvsWebrtcClientViewer程序接收帧时，帧缓冲前明顯多個范围的波动，帧缓冲后（先放入缓存buffer中，再从buffer中拿取帧），明顯改善平滑接收。
+![](img/image9.jpg)
+
+# 3. **发送端处理**
+
+## 3.1 **原始的发送端实现**
+
+![](img/image1.jpeg)
+
+原始sample中，第一次连接时会启动两个数据发送线程sendAudioPackets和sendVideoPackets，这两个线程一旦启动后即不会关闭。以sendVideoPackets为例，每间隔40ms发送一次数据，每次发送数据都分为两步：
+
+1.  调用readFrameFromDisk从文件读取一帧
+
+2.  通过writeFrame发送到socket，这里注意for (i = 0; i <
+    pSampleConfiguration->streamingSessionCount;
+    ++i)，连接了几个session（也就是连接了几个viewer），每帧数据就要循环发送几次；
+
+这里就会存在几个问题：
+
+1.  发送的数据不缓存，如果某帧发送失败，那么该帧就丢掉了，接收掉看到就是有掉帧现象
+
+2.  当几个session同时连接时，发送数据是线性发送的，一个session网络状况不佳，发送数据耗时长，会直接影响到所有session数据的发送
+
+```C
+  PVOID sendVideoPackets(PVOID args)
+  {
+	  ......
+	  while (!ATOMIC_LOAD_BOOL(&pSampleConfiguration->appTerminateFlag)) {
+		  fileIndex = fileIndex % NUMBER_OF_H264_FRAME_FILES + 1;
+		  SNPRINTF(filePath, MAX_PATH_LEN, "./h264SampleFrames/frame-%04d.h264", fileIndex);
+		  
+		  CHK_STATUS(readFrameFromDisk(NULL, &frameSize, filePath));
+		  
+		  // Re-alloc if needed
+		  if (frameSize > pSampleConfiguration->videoBufferSize) {
+			  pSampleConfiguration->pVideoFrameBuffer = (PBYTE) MEMREALLOC(pSampleConfiguration->pVideoFrameBuffer, frameSize);
+			  CHK_ERR(pSampleConfiguration->pVideoFrameBuffer != NULL, STATUS_NOT_ENOUGH_MEMORY, "[KVS Master] Failed to allocate video frame buffer");
+			  pSampleConfiguration->videoBufferSize = frameSize;
+		  }
+		  
+		  frame.frameData = pSampleConfiguration->pVideoFrameBuffer;
+		  frame.size = frameSize;
+		  
+		  CHK_STATUS(readFrameFromDisk(frame.frameData, &frameSize, filePath));
+		  
+		  // based on bitrate of samples/h264SampleFrames/frame-*
+		  encoderStats.width = 640;
+		  encoderStats.height = 480;
+		  encoderStats.targetBitrate = 262000;
+		  frame.presentationTs += SAMPLE_VIDEO_FRAME_DURATION;
+		  MUTEX_LOCK(pSampleConfiguration->streamingSessionListReadLock);
+		  for (i = 0; i < pSampleConfiguration->streamingSessionCount; ++i) {
+			  status = writeFrame(pSampleConfiguration->sampleStreamingSessionList[i]->pVideoRtcRtpTransceiver, &frame);
+			  if (pSampleConfiguration->sampleStreamingSessionList[i]->firstFrame && status == STATUS_SUCCESS) {
+				  PROFILE_WITH_START_TIME(pSampleConfiguration->sampleStreamingSessionList[i]->offerReceiveTime, "Time to first frame");
+				  pSampleConfiguration->sampleStreamingSessionList[i]->firstFrame = FALSE;
+			  }
+			  encoderStats.encodeTimeMsec = 4; // update encode time to an arbitrary number to demonstrate stats update
+			  updateEncoderStats(pSampleConfiguration->sampleStreamingSessionList[i]->pVideoRtcRtpTransceiver, &encoderStats);
+			  if (status != STATUS_SRTP_NOT_READY_YET) {
+				  if (status != STATUS_SUCCESS) {
+					  DLOGV("writeFrame() failed with 0x%08x", status);
+				  }
+			  }
+		  }
+		  MUTEX_UNLOCK(pSampleConfiguration->streamingSessionListReadLock);
+		  
+		  // Adjust sleep in the case the sleep itself and writeFrame take longer than expected. Since sleep makes sure that the thread
+		  // will be paused at least until the given amount, we can assume that there's no too early frame scenario.
+		  // Also, it's very unlikely to have a delay greater than SAMPLE_VIDEO_FRAME_DURATION, so the logic assumes that this is always
+		  // true for simplicity.
+		  elapsed = lastFrameTime - startTime;
+		  THREAD_SLEEP(SAMPLE_VIDEO_FRAME_DURATION - elapsed % SAMPLE_VIDEO_FRAME_DURATION);
+		  lastFrameTime = GETTIME();
+	  }
+  }
+
+```
+
+## 3.2 **添加数据缓存后的发送端实现**
+
+![](img/image2.jpeg)
+
+1.  在接收到Viewer端的SDP OFFER后，调用createSampleStreamingSession创建session，在createSampleStreamingSession中分别初始化video和audio的缓存buffer，同时创建两个处理线程process VideoPackets和process AudioPackets；这样每个session都有自己的缓冲buffer及处理线程，互不影响；这里video的FrameBuffer长度设为100，audio的FrameBuffer长度设为200；因为video是每秒25帧，audio是每秒50帧，如此设置，即大概缓存4s中的音视频数据；
+
+2.  在sendVideoPackets中，每40ms读取一帧视频数据，将数据插入到每个session的缓存buffer中；
+
+3.  在process VideoPackets处理时，只要对应的FrameBuffer中有数据，就通过popFrame获取一帧，经writeFrame发送到socket；发送成功后，会从FrameBuffer中清除该帧；如果该帧发送失败，该帧不清除，继续尝试发送；
+
+```C
+  PVOID sendVideoPackets(PVOID args)
+  {
+	  ......
+	  while (!ATOMIC_LOAD_BOOL(&pSampleConfiguration->appTerminateFlag)) {
+		  ......
+		  for (i = 0; i < pSampleConfiguration->streamingSessionCount; ++i) {
+			pushFrame(pSampleConfiguration->sampleStreamingSessionList[i]->pCacheVideoFrame, &frame);
+		  }
+	  }
+	  ......
+  }
+  
+  PVOID processVideoPackets(PVOID args)
+  {
+	  ......
+	  while (!ATOMIC_LOAD_BOOL(&pSampleStreamingSession->terminateFlag)) {
+		  // based on bitrate of samples/h264SampleFrames/frame-*
+		  encoderStats.width = 640;
+		  encoderStats.height = 480;
+		  encoderStats.targetBitrate = 262000;
+		  
+		  status = popFrame(pSampleStreamingSession->pCacheVideoFrame, &pFrame);
+		  if (STATUS_SUCCESS == status) {
+			  status = writeFrame(pSampleStreamingSession->pVideoRtcRtpTransceiver, pFrame);
+			  if (pSampleStreamingSession->firstFrame && status == STATUS_SUCCESS) {
+				  PROFILE_WITH_START_TIME(pSampleStreamingSession->offerReceiveTime, "Time to first frame");
+				  pSampleStreamingSession->firstFrame = FALSE;
+			  }
+			  encoderStats.encodeTimeMsec = 4; // update encode time to an arbitrary number to demonstrate stats update
+			  updateEncoderStats(pSampleStreamingSession->pVideoRtcRtpTransceiver, &encoderStats);
+			  if (status != STATUS_SRTP_NOT_READY_YET) {
+				  if (status != STATUS_SUCCESS) {
+					  DLOGV("writeFrame() failed with 0x%08x", status);
+				  } else {
+					  deleteFrame(pSampleStreamingSession->pCacheVideoFrame, pFrame);
+				  }
+			  } else {
+				  deleteFrame(pSampleStreamingSession->pCacheVideoFrame, pFrame); // Discard packets till SRTP is ready
+			  }
+		  }
+	  }
+	  ......
+  }
+
+```
+
+## 3.3 **缓冲数据后的测试结果**
+
+测试方法：
+
+1.  同一局域网环境，准备一个Ubuntu机器，一个windows笔记本，一个手机，连接到一个路由器上
+
+2.  Ubuntu机器运行kvsWebRtcClientMaster
+
+3.  分别在Ubuntu机器上的浏览器（channel1），windows笔记本浏览器（channel2），和手机浏览器（channel3）
+    运行testpage(https://awslabs.github.io/amazon-kinesis-video-streams-webrtc-sdk-js/examples/index.html)
+
+4.  当三个Viewer都显示出音视频后，播放一会，可以将路由器远离Ubuntu设备，制造一种Master的弱网环境，测试出的帧缓存如下：
+
+![](img/image3.png)
+
+channel1基本无缓存，生产一帧数据，即发送一帧数据；
+
+![](img/image4.png)
+
+![](img/image5.png)
+
+channel2和channel3都会根据网络的情况产生一些缓存buffer，当网络恢复时，缓冲帧会逐步发送。
 
 # 4. **未尽问题**
 
