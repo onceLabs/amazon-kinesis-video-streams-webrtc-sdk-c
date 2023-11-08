@@ -10,6 +10,15 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "kvs/error.h"
+#include "kvs/common_defs.h"
+#include "kvs/platform_utils.h"
+#include "Crypto.h"
+#ifdef KVS_PLAT_ESP_FREERTOS
+#include <srtp.h>
+#else
+#include <srtp2/srtp.h>
+#endif
 
 typedef struct __SrtpSession SrtpSession;
 struct __SrtpSession {

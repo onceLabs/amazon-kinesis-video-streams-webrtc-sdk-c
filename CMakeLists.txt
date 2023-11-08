@@ -10,8 +10,8 @@ project(KinesisVideoWebRTCClient VERSION 1.8.1 LANGUAGES C)
 # User Flags
 option(ADD_MUCLIBC "Add -muclibc c flag" OFF)
 option(BUILD_DEPENDENCIES "Whether or not to build depending libraries from source" ON)
-option(USE_OPENSSL "Use openssl as crypto library" ON)
-option(USE_MBEDTLS "Use mbedtls as crypto library" OFF)
+option(USE_OPENSSL "Use openssl as crypto library" OFF)
+option(USE_MBEDTLS "Use mbedtls as crypto library" ON)
 option(BUILD_STATIC_LIBS "Build all libraries statically. (This includes third-party libraries.)" OFF)
 option(BUILD_OPENSSL_PLATFORM "If buildng OpenSSL what is the target platform" OFF)
 option(BUILD_LIBSRTP_HOST_PLATFORM "If buildng LibSRTP what is the current platform" OFF)
@@ -30,6 +30,7 @@ option(MEMORY_SANITIZER "Build with MemorySanitizer." OFF)
 option(THREAD_SANITIZER "Build with ThreadSanitizer." OFF)
 option(UNDEFINED_BEHAVIOR_SANITIZER "Build with UndefinedBehaviorSanitizer." OFF)
 option(LINK_PROFILER "Link gperftools profiler" OFF)
+option(ENABLE_TWCC_FUNCTION "Build with twcc function" OFF)
 
 if(WIN32)
   set(EXT_PTHREAD_INCLUDE_DIR "" CACHE PATH "Path to the PThread dir")
@@ -53,14 +54,18 @@ else()
 endif()
 
 if(NOT WIN32)
-CHECK_INCLUDE_FILES(ifaddrs.h       KVSWEBRTC_HAVE_IFADDRS_H)
-if(NOT KVSWEBRTC_HAVE_IFADDRS_H)
-  message(FATAL_ERROR "Platform should support the ifaddrs interface.")
-endif()
-CHECK_FUNCTION_EXISTS(getifaddrs    KVSWEBRTC_HAVE_GETIFADDRS)
-if(NOT KVSWEBRTC_HAVE_GETIFADDRS)
-  message(FATAL_ERROR "Platform should support getifaddrs API.")
-endif()
+  CHECK_INCLUDE_FILES(ifaddrs.h       KVSWEBRTC_HAVE_IFADDRS_H)
+  if(NOT KVSWEBRTC_HAVE_IFADDRS_H)
+    if (NOT KVS_PLAT_ESP_FREERTOS)
+      message(FATAL_ERROR "Platform should support the ifaddrs interface.")
+    endif()
+  endif()
+  CHECK_FUNCTION_EXISTS(getifaddrs    KVSWEBRTC_HAVE_GETIFADDRS)
+  if(NOT KVSWEBRTC_HAVE_GETIFADDRS)
+    if (NOT KVS_PLAT_ESP_FREERTOS)
+      message(FATAL_ERROR "Platform should support getifaddrs API.")
+    endif()
+  endif()
 endif()
 
 set(CMAKE_MACOSX_RPATH TRUE)
@@ -96,15 +101,19 @@ message(STATUS "dependencies install path is ${OPEN_SRC_INSTALL_PREFIX}")
 
 # pass ca cert location to sdk
 add_definitions(-DKVS_CA_CERT_PATH="${CMAKE_SOURCE_DIR}/certs/cert.pem")
-add_definitions(-DCMAKE_DETECTED_CACERT_PATH)
+if (NOT KVS_PLAT_ESP_FREERTOS)
+  add_definitions(-DCMAKE_DETECTED_CACERT_PATH)
+endif()
 
 if(USE_OPENSSL)
   add_definitions(-DKVS_USE_OPENSSL)
 elseif(USE_MBEDTLS)
   add_definitions(-DKVS_USE_MBEDTLS)
   # FIXME: there's probably a better way to inject MBEDTLS_USER_CONFIG_FILE flag without mutating the global CMAKE_C_FLAGS and CMAKE_CXX_FLAGS
-  set(CMAKE_C_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/configs -DMBEDTLS_USER_CONFIG_FILE=\"<config_mbedtls.h>\" ${CMAKE_C_FLAGS}")
-  set(CMAKE_CXX_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/configs -DMBEDTLS_USER_CONFIG_FILE=\"<config_mbedtls.h>\" ${CMAKE_CXX_FLAGS}")
+  if (NOT KVS_PLAT_ESP_FREERTOS)
+    set(CMAKE_C_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/configs -DMBEDTLS_USER_CONFIG_FILE=\"<config_mbedtls.h>\" ${CMAKE_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/configs -DMBEDTLS_USER_CONFIG_FILE=\"<config_mbedtls.h>\" ${CMAKE_CXX_FLAGS}")
+  endif()
 endif()
 
 if(BUILD_DEPENDENCIES)
@@ -193,13 +202,14 @@ if(BUILD_DEPENDENCIES)
 endif()
 
 # building kvsCommonLws also builds kvspic
-set(BUILD_ARGS
+if (NOT KVS_PLAT_ESP_FREERTOS)
+  set(BUILD_ARGS
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DUSE_OPENSSL=${USE_OPENSSL}
         -DUSE_MBEDTLS=${USE_MBEDTLS}
         -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS})
-build_dependency(kvsCommonLws ${BUILD_ARGS})
-
+  build_dependency(kvsCommonLws ${BUILD_ARGS})
+endif()
 ############# find dependent libraries ############
 
 find_package(Threads)
@@ -208,19 +218,24 @@ if (USE_OPENSSL)
   find_package(OpenSSL REQUIRED)
   set(OPEN_SRC_INCLUDE_DIRS ${OPEN_SRC_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
 else()
-  find_package(MbedTLS REQUIRED)
-  set(OPEN_SRC_INCLUDE_DIRS ${OPEN_SRC_INCLUDE_DIRS} ${MBEDTLS_INCLUDE_DIRS})
+  if(NOT KVS_PLAT_ESP_FREERTOS)
+    find_package(MbedTLS REQUIRED)
+    set(OPEN_SRC_INCLUDE_DIRS ${OPEN_SRC_INCLUDE_DIRS} ${MBEDTLS_INCLUDE_DIRS})
+  endif()
 endif()
 
 if (OPEN_SRC_INSTALL_PREFIX)
-  find_library(SRTP_LIBRARIES srtp2 REQUIRED PATHS ${OPEN_SRC_INSTALL_PREFIX})
-
+  if (NOT KVS_PLAT_ESP_FREERTOS)
+    find_library(SRTP_LIBRARIES srtp2 REQUIRED PATHS ${OPEN_SRC_INSTALL_PREFIX})
+  endif()
   if (LINK_PROFILER)
     find_library(GPERFTOOLS_MALLOC_LIBRARIES tcmalloc REQUIRED PATHS ${OPEN_SRC_INSTALL_PREFIX})
     find_library(GPERFTOOLS_PROFILER_LIBRARIES profiler REQUIRED PATHS ${OPEN_SRC_INSTALL_PREFIX})
   endif()
 else()
-  find_library(SRTP_LIBRARIES srtp2 REQUIRED )
+  if (NOT KVS_PLAT_ESP_FREERTOS)
+    find_library(SRTP_LIBRARIES srtp2 REQUIRED )
+  endif()
   if (LINK_PROFILER)
     find_library(GPERFTOOLS_MALLOC_LIBRARIES tcmalloc REQUIRED)
     find_library(GPERFTOOLS_PROFILER_LIBRARIES profiler REQUIRED)
@@ -230,14 +245,18 @@ endif()
 if (WIN32)
   SET(LIBWEBSOCKETS_LIBRARIES "websockets.lib")
 else()
-  pkg_check_modules(LIBWEBSOCKETS REQUIRED libwebsockets)
+  if(NOT KVS_PLAT_ESP_FREERTOS)
+    pkg_check_modules(LIBWEBSOCKETS REQUIRED libwebsockets)
+  endif()
 endif()
 
 # usrsctp dont support pkgconfig yet
-find_library(
-  Usrsctp
-  NAMES ${USRSCTP_LIBNAME} usrsctp REQUIRED
-  PATHS ${OPEN_SRC_INSTALL_PREFIX}/lib ${OPEN_SRC_INSTALL_PREFIX}/lib64)
+if(NOT KVS_PLAT_ESP_FREERTOS)
+  find_library(
+    Usrsctp
+    NAMES ${USRSCTP_LIBNAME} usrsctp REQUIRED
+    PATHS ${OPEN_SRC_INSTALL_PREFIX}/lib ${OPEN_SRC_INSTALL_PREFIX}/lib64)
+endif()
 
 set(OPEN_SRC_INCLUDE_DIRS ${OPEN_SRC_INCLUDE_DIRS} ${LIBSRTP_INCLUDE_DIRS}
                           ${CURL_INCLUDE_DIRS} ${LIBWEBSOCKETS_INCLUDE_DIRS})
@@ -245,7 +264,9 @@ set(OPEN_SRC_INCLUDE_DIRS ${OPEN_SRC_INCLUDE_DIRS} ${LIBSRTP_INCLUDE_DIRS}
 link_directories(${LIBSRTP_LIBRARY_DIRS})
 link_directories(${LIBWEBSOCKETS_LIBRARY_DIRS})
 link_directories(${OPEN_SRC_INSTALL_PREFIX}/lib)
-link_directories(${OPEN_SRC_INSTALL_PREFIX}/lib64)
+if(NOT KVS_PLAT_ESP_FREERTOS)
+  link_directories(${OPEN_SRC_INSTALL_PREFIX}/lib64)
+endif()
 
 ############# find dependent libraries end ############
 
@@ -291,29 +312,59 @@ if (ENABLE_DATA_CHANNEL)
       )
 endif()
 
+if (ENABLE_TWCC_FUNCTION)
+add_definitions(-DENABLE_TWCC_FUNCTION)
+endif()
+
 if (INSTRUMENTED_ALLOCATORS)
   add_definitions(-DINSTRUMENTED_ALLOCATORS)
 endif()
 
-file(
-  GLOB
-  WEBRTC_CLIENT_SOURCE_FILES
-  "src/source/Crypto/*.c"
-  "src/source/Ice/*.c"
-  "src/source/PeerConnection/JitterBuffer.c"
-  "src/source/PeerConnection/jsmn.c"
-  "src/source/PeerConnection/PeerConnection.c"
-  "src/source/PeerConnection/Retransmitter.c"
-  "src/source/PeerConnection/Rtcp.c"
-  "src/source/PeerConnection/Rtp.c"
-  "src/source/PeerConnection/SessionDescription.c"
-  "src/source/Rtcp/*.c"
-  "src/source/Rtp/*.c"
-  "src/source/Rtp/Codecs/*.c"
-  "src/source/Sdp/*.c"
-  "src/source/Srtp/*.c"
-  "src/source/Stun/*.c"
-  "src/source/Metrics/*.c")
+if(KVS_PLAT_ESP_FREERTOS)
+  file(GLOB WEBRTC_STATE_MACHINE_SOURCE_FILES "src/source/StateMachine/*.c")
+  file(GLOB WEBRTC_UTILS_SOURCE_FILES "src/source/Utils/*.c")
+  file(
+    GLOB
+    WEBRTC_CLIENT_SOURCE_FILES
+    "src/source/Crypto/*.c"
+    "src/source/Ice/*.c"
+    "src/source/Json/*.c"
+    "src/source/Net/*.c"
+    "src/source/PeerConnection/JitterBuffer.c"
+    "src/source/PeerConnection/jsmn.c"
+    "src/source/PeerConnection/PeerConnection.c"
+    "src/source/PeerConnection/Retransmitter.c"
+    "src/source/PeerConnection/Rtcp.c"
+    "src/source/PeerConnection/Rtp.c"
+    "src/source/PeerConnection/SessionDescription.c"
+    "src/source/Rtcp/*.c"
+    "src/source/Rtp/*.c"
+    "src/source/Rtp/Codecs/*.c"
+    "src/source/Sdp/*.c"
+    "src/source/Srtp/*.c"
+    "src/source/Stun/*.c"
+    "src/source/Metrics/*.c")
+else()
+  file(
+    GLOB
+    WEBRTC_CLIENT_SOURCE_FILES
+    "src/source/Crypto/*.c"
+    "src/source/Ice/*.c"
+    "src/source/PeerConnection/JitterBuffer.c"
+    "src/source/PeerConnection/jsmn.c"
+    "src/source/PeerConnection/PeerConnection.c"
+    "src/source/PeerConnection/Retransmitter.c"
+    "src/source/PeerConnection/Rtcp.c"
+    "src/source/PeerConnection/Rtp.c"
+    "src/source/PeerConnection/SessionDescription.c"
+    "src/source/Rtcp/*.c"
+    "src/source/Rtp/*.c"
+    "src/source/Rtp/Codecs/*.c"
+    "src/source/Sdp/*.c"
+    "src/source/Srtp/*.c"
+    "src/source/Stun/*.c"
+    "src/source/Metrics/*.c")
+endif()
 
 if (USE_OPENSSL)
   list(FILTER WEBRTC_CLIENT_SOURCE_FILES EXCLUDE REGEX ".*_mbedtls\\.c")
@@ -321,13 +372,32 @@ elseif (USE_MBEDTLS)
   list(FILTER WEBRTC_CLIENT_SOURCE_FILES EXCLUDE REGEX ".*_openssl\\.c")
 endif()
 
-file(GLOB WEBRTC_SIGNALING_CLIENT_SOURCE_FILES "src/source/Signaling/*.c")
-
+if(KVS_PLAT_ESP_FREERTOS)
+  file(
+    GLOB
+    WEBRTC_SIGNALING_CLIENT_SOURCE_FILES
+    "src/source/Credential/*.c"
+    "src/source/ApiCall/*.c"
+    "src/source/Signaling/*.c"
+  )
+else()
+  file(GLOB WEBRTC_SIGNALING_CLIENT_SOURCE_FILES "src/source/Signaling/*.c")
+endif()
 
 include_directories(${OPEN_SRC_INCLUDE_DIRS})
 include_directories(${OPEN_SRC_INSTALL_PREFIX}/include)
 include_directories(${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/src/include)
-include_directories(${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/src/ice)
+
+if(NOT KVS_PLAT_ESP_FREERTOS)
+  include_directories(${KINESIS_VIDEO_WEBRTC_CLIENT_SRC}/src/ice)
+endif()
+
+if(KVS_PLAT_ESP_FREERTOS)
+  add_library(kvsWebrtcStateMachine STATIC ${WEBRTC_STATE_MACHINE_SOURCE_FILES})
+  target_link_libraries(kvsWebrtcStateMachine)
+  add_library(kvsWebrtcUtils STATIC ${WEBRTC_UTILS_SOURCE_FILES})
+  target_link_libraries(kvsWebrtcUtils ${CMAKE_THREAD_LIBS_INIT})
+endif()
 
 add_library(kvsWebrtcClient ${LINKAGE} ${WEBRTC_CLIENT_SOURCE_FILES} ${DATACHANNEL_SRC})
 
@@ -335,19 +405,35 @@ if(USE_MBEDTLS)
   target_compile_definitions(kvsWebrtcClient PRIVATE LWS_WITH_MBEDTLS)
 endif()
 
-target_link_libraries(
-  kvsWebrtcClient
-  PRIVATE kvspicUtils
-          kvspicState
-          ${CMAKE_THREAD_LIBS_INIT}
-          ${OPENSSL_SSL_LIBRARY}
-          ${OPENSSL_CRYPTO_LIBRARY}
-          ${SRTP_LIBRARIES}
-          ${Usrsctp}
-          ${MBEDTLS_LIBRARIES}
-          ${GPERFTOOLS_MALLOC_LIBRARIES}
-          ${GPERFTOOLS_PROFILER_LIBRARIES}
-          ${EXTRA_DEPS})
+if(KVS_PLAT_ESP_FREERTOS)
+  target_link_libraries(
+    kvsWebrtcClient
+    PRIVATE kvsWebrtcUtils
+            kvsWebrtcStateMachine
+            ${CMAKE_THREAD_LIBS_INIT}
+            ${OPENSSL_SSL_LIBRARY}
+            ${OPENSSL_CRYPTO_LIBRARY}
+            ${SRTP_LIBRARIES}
+            ${Usrsctp}
+            ${SRTP_LIBRARIES}
+            ${MBEDTLS_LIBRARIES}
+            ${EXTRA_DEPS}
+  )
+else()
+  target_link_libraries(
+    kvsWebrtcClient
+    PRIVATE kvspicUtils
+            kvspicState
+            ${CMAKE_THREAD_LIBS_INIT}
+            ${OPENSSL_SSL_LIBRARY}
+            ${OPENSSL_CRYPTO_LIBRARY}
+            ${SRTP_LIBRARIES}
+            ${Usrsctp}
+            ${MBEDTLS_LIBRARIES}
+            ${GPERFTOOLS_MALLOC_LIBRARIES}
+            ${GPERFTOOLS_PROFILER_LIBRARIES}
+            ${EXTRA_DEPS})
+endif()
 
 add_library(kvsWebrtcSignalingClient ${LINKAGE} ${WEBRTC_SIGNALING_CLIENT_SOURCE_FILES})
 
@@ -355,20 +441,34 @@ if(USE_MBEDTLS)
   target_compile_definitions(kvsWebrtcSignalingClient PRIVATE LWS_WITH_MBEDTLS)
 endif()
 
-target_link_libraries(
-  kvsWebrtcSignalingClient
-  PUBLIC
-        kvsCommonLws
-        ${LIBWEBSOCKETS_LIBRARIES} 
-  PRIVATE kvspicUtils
-         kvspicState
-         ${CMAKE_THREAD_LIBS_INIT}
-         ${EXTRA_DEPS}
-         ${OPENSSL_SSL_LIBRARY}
-         ${OPENSSL_CRYPTO_LIBRARY}
-         ${GPERFTOOLS_MALLOC_LIBRARIES}
-         ${GPERFTOOLS_PROFILER_LIBRARIES}
-         ${MBEDTLS_LIBRARIES})
+if(KVS_PLAT_ESP_FREERTOS)
+  target_link_libraries(
+    kvsWebrtcSignalingClient
+    PRIVATE kvsWebrtcUtils
+          kvsWebrtcStateMachine
+          ${CMAKE_THREAD_LIBS_INIT}
+          ${EXTRA_DEPS}
+          ${OPENSSL_SSL_LIBRARY}
+          ${OPENSSL_CRYPTO_LIBRARY}
+          ${MBEDTLS_LIBRARIES}
+          ${LLHTTP_LIBRARIES}
+          ${WSLAY_LIBRARIES})
+else()
+  target_link_libraries(
+    kvsWebrtcSignalingClient
+    PUBLIC
+          kvsCommonLws
+          ${LIBWEBSOCKETS_LIBRARIES} 
+    PRIVATE kvspicUtils
+          kvspicState
+          ${CMAKE_THREAD_LIBS_INIT}
+          ${EXTRA_DEPS}
+          ${OPENSSL_SSL_LIBRARY}
+          ${OPENSSL_CRYPTO_LIBRARY}
+          ${GPERFTOOLS_MALLOC_LIBRARIES}
+          ${GPERFTOOLS_PROFILER_LIBRARIES}
+          ${MBEDTLS_LIBRARIES})
+endif()
 
 if (WIN32)
   target_link_libraries(kvsWebrtcClient PRIVATE "Ws2_32" "iphlpapi")

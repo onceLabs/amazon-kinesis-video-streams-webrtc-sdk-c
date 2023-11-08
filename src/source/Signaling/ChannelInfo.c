@@ -1,5 +1,8 @@
 #define LOG_CLASS "ChannelInfo"
-#include "../Include_i.h"
+#include "ChannelInfo.h"
+
+// Used for ensuring alignment
+#define ALIGN_UP_TO_MACHINE_WORD(x) ROUND_UP((x), SIZEOF(SIZE_T))
 
 STATUS createValidateChannelInfo(PChannelInfo pOrigChannelInfo, PChannelInfo* ppChannelInfo)
 {

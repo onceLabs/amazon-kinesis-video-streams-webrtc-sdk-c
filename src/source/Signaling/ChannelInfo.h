@@ -9,6 +9,7 @@ Signaling internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "kvs/webrtc_client.h"
 
 // Max control plane URI char len
 #define MAX_CONTROL_PLANE_URI_CHAR_LEN 256

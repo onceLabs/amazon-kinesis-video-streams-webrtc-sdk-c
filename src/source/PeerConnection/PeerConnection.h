@@ -9,6 +9,16 @@ PeerConnection internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "kvs/error.h"
+#include "kvs/common_defs.h"
+#include "HashTable.h"
+#include "DoubleLinkedList.h"
+#include "Dtls.h"
+#include "IceAgent.h"
+#include "Network.h"
+#include "SrtpSession.h"
+#include "Sctp.h"
+#include "RtpPacket.h"
 
 #define LOCAL_ICE_UFRAG_LEN 4
 #define LOCAL_ICE_PWD_LEN   24
@@ -81,8 +91,9 @@ typedef struct {
     MUTEX pSrtpSessionLock;
     PSrtpSession pSrtpSession;
 
+#ifdef ENABLE_DATA_CHANNEL
     PSctpSession pSctpSession;
-
+#endif
     SessionDescription remoteSessionDescription;
     PDoubleList pTransceivers;
     PDoubleList pFakeTransceivers;
@@ -118,9 +129,10 @@ typedef struct {
     // DataChannels keyed by streamId
     PHashTable pDataChannels;
 
+#ifdef ENABLE_DATA_CHANNEL
     UINT64 onDataChannelCustomData;
     RtcOnDataChannel onDataChannel;
-
+#endif
     UINT64 onIceCandidateCustomData;
     RtcOnIceCandidate onIceCandidate;
 
@@ -134,9 +146,11 @@ typedef struct {
 
     // congestion control
     // https://tools.ietf.org/html/draft-holmer-rmcat-transport-wide-cc-extensions-01
+#ifdef ENABLE_TWCC_FUNCTION
     UINT16 twccExtId;
     MUTEX twccLock;
     PTwccManager pTwccManager;
+#endif
     RtcOnSenderBandwidthEstimation onSenderBandwidthEstimation;
     UINT64 onSenderBandwidthEstimationCustomData;
 
@@ -144,11 +158,13 @@ typedef struct {
     KvsPeerConnectionDiagnostics peerConnectionDiagnostics;
 } KvsPeerConnection, *PKvsPeerConnection;
 
+#ifdef ENABLE_DATA_CHANNEL
 typedef struct {
     UINT32 currentDataChannelId;
     PKvsPeerConnection pKvsPeerConnection;
     PHashTable unkeyedDataChannels;
 } AllocateSctpSortDataChannelsData, *PAllocateSctpSortDataChannelsData;
+#endif
 
 STATUS onFrameReadyFunc(UINT64, UINT16, UINT16, UINT32);
 STATUS onFrameDroppedFunc(UINT64, UINT16, UINT16, UINT32);
@@ -158,7 +174,9 @@ VOID onSctpSessionDataChannelOpen(UINT64, UINT32, PBYTE, UINT32);
 
 STATUS sendPacketToRtpReceiver(PKvsPeerConnection, PBYTE, UINT32);
 STATUS changePeerConnectionState(PKvsPeerConnection, RTC_PEER_CONNECTION_STATE);
+#ifdef ENABLE_TWCC_FUNCTION
 STATUS twccManagerOnPacketSent(PKvsPeerConnection, PRtpPacket);
+#endif
 
 // visible for testing only
 VOID onIceConnectionStateChange(UINT64, UINT64);

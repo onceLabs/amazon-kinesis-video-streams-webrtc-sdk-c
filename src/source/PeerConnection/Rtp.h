@@ -6,6 +6,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "RtpPacket.h"
+#include "RtpRollingBuffer.h"
+#include "JitterBuffer.h"
+#include "PeerConnection.h"
+#include "Retransmitter.h"
 
 // Default MTU comes from libwebrtc
 // https://groups.google.com/forum/#!topic/discuss-webrtc/gH5ysR3SoZI

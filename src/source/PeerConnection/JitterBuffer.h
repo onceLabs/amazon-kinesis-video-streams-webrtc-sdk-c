@@ -9,6 +9,12 @@ PeerConnection internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "kvs/error.h"
+#include "kvs/common_defs.h"
+#include "kvs/platform_utils.h"
+#include "kvs/webrtc_client.h"
+#include "HashTable.h"
+#include "RtpPacket.h"
 
 typedef STATUS (*FrameReadyFunc)(UINT64, UINT16, UINT16, UINT32);
 typedef STATUS (*FrameDroppedFunc)(UINT64, UINT16, UINT16, UINT32);

@@ -1,6 +1,9 @@
 #define LOG_CLASS "DataChannel"
 
 #include "../Include_i.h"
+#include "PeerConnection.h"
+#include "Sctp.h"
+#include "DataChannel.h"
 
 STATUS connectLocalDataChannel()
 {
@@ -19,7 +22,7 @@ STATUS createDataChannel(PRtcPeerConnection pPeerConnection, PCHAR pDataChannelN
     CHK(pKvsPeerConnection != NULL && pDataChannelName != NULL && ppRtcDataChannel != NULL, STATUS_NULL_ARG);
 
     // Only support creating DataChannels before signaling for now
-    CHK(pKvsPeerConnection->pSctpSession == NULL, STATUS_INTERNAL_ERROR);
+    CHK(pKvsPeerConnection->pSctpSession == NULL, STATUS_PEER_CONN_NO_SCTP_SESSION);
 
     CHK((pKvsDataChannel = (PKvsDataChannel) MEMCALLOC(1, SIZEOF(KvsDataChannel))) != NULL, STATUS_NOT_ENOUGH_MEMORY);
     STRNCPY(pKvsDataChannel->dataChannel.name, pDataChannelName, MAX_DATA_CHANNEL_NAME_LEN);

@@ -1,6 +1,6 @@
 #define LOG_CLASS "RtpRollingBuffer"
 
-#include "../Include_i.h"
+#include "RtpRollingBuffer.h"
 
 STATUS createRtpRollingBuffer(UINT32 capacity, PRtpRollingBuffer* ppRtpRollingBuffer)
 {
@@ -58,10 +58,10 @@ STATUS rtpRollingBufferAddRtpPacket(PRtpRollingBuffer pRollingBuffer, PRtpPacket
     PRtpPacket pRtpPacketCopy = NULL;
     PBYTE pRawPacketCopy = NULL;
     UINT64 index = 0;
-    CHK(pRollingBuffer != NULL && pRtpPacket != NULL, STATUS_NULL_ARG);
+    CHK(pRollingBuffer != NULL && pRtpPacket != NULL, STATUS_RTCP_NULL_ARG);
 
     pRawPacketCopy = (PBYTE) MEMALLOC(pRtpPacket->rawPacketLength);
-    CHK(pRawPacketCopy != NULL, STATUS_NOT_ENOUGH_MEMORY);
+    CHK(pRawPacketCopy != NULL, STATUS_RTP_NOT_ENOUGH_MEMORY);
     MEMCPY(pRawPacketCopy, pRtpPacket->pRawPacket, pRtpPacket->rawPacketLength);
     CHK_STATUS(createRtpPacketFromBytes(pRawPacketCopy, pRtpPacket->rawPacketLength, &pRtpPacketCopy));
     // pRtpPacketCopy took ownership of pRawPacketCopy
@@ -91,7 +91,7 @@ STATUS rtpRollingBufferGetValidSeqIndexList(PRtpRollingBuffer pRollingBuffer, PU
     UINT16 seqNum;
     UINT32 size = 0;
 
-    CHK(pRollingBuffer != NULL && pValidSeqIndexList != NULL && pSequenceNumberList != NULL, STATUS_NULL_ARG);
+    CHK(pRollingBuffer != NULL && pValidSeqIndexList != NULL && pSequenceNumberList != NULL, STATUS_RTCP_NULL_ARG);
 
     CHK_STATUS(rollingBufferGetSize(pRollingBuffer->pRollingBuffer, &size));
     // Empty buffer, just return

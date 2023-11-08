@@ -9,12 +9,22 @@ IceAgent internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "HashTable.h"
+#include "DoubleLinkedList.h"
+#include "Endianness.h"
+#include "Stun.h"
+#include "TimerQueue.h"
+#include "state_machine.h"
+#include "IceUtils.h"
+#include "ConnectionListener.h"
+#include "Network.h"
+#include "Sdp.h"
 
 #define KVS_ICE_MAX_CANDIDATE_PAIR_COUNT                       1024
 #define KVS_ICE_MAX_REMOTE_CANDIDATE_COUNT                     100
 #define KVS_ICE_MAX_LOCAL_CANDIDATE_COUNT                      100
 #define KVS_ICE_GATHER_REFLEXIVE_AND_RELAYED_CANDIDATE_TIMEOUT (10 * HUNDREDS_OF_NANOS_IN_A_SECOND)
-#define KVS_ICE_CONNECTIVITY_CHECK_TIMEOUT                     (10 * HUNDREDS_OF_NANOS_IN_A_SECOND)
+#define KVS_ICE_CONNECTIVITY_CHECK_TIMEOUT                     (20 * HUNDREDS_OF_NANOS_IN_A_SECOND)
 #define KVS_ICE_CANDIDATE_NOMINATION_TIMEOUT                   (10 * HUNDREDS_OF_NANOS_IN_A_SECOND)
 #define KVS_ICE_SEND_KEEP_ALIVE_INTERVAL                       (15 * HUNDREDS_OF_NANOS_IN_A_SECOND)
 #define KVS_ICE_TURN_CONNECTION_SHUTDOWN_TIMEOUT               (1 * HUNDREDS_OF_NANOS_IN_A_SECOND)
@@ -28,7 +38,7 @@ extern "C" {
 #define KVS_ICE_GATHER_CANDIDATE_TIMER_POLLING_INTERVAL (50 * HUNDREDS_OF_NANOS_IN_A_MILLISECOND)
 
 /* ICE should've received at least one keep alive within this period. Since keep alives are send every 15s */
-#define KVS_ICE_ENTER_STATE_DISCONNECTION_GRACE_PERIOD (2 * KVS_ICE_SEND_KEEP_ALIVE_INTERVAL)
+#define KVS_ICE_ENTER_STATE_DISCONNECTION_GRACE_PERIOD (4 * KVS_ICE_SEND_KEEP_ALIVE_INTERVAL)
 #define KVS_ICE_ENTER_STATE_FAILED_GRACE_PERIOD        (15 * HUNDREDS_OF_NANOS_IN_A_SECOND)
 
 #define STUN_HEADER_MAGIC_BYTE_OFFSET 4
@@ -50,7 +60,7 @@ extern "C" {
 
 #define KVS_ICE_DEFAULT_TURN_PROTOCOL KVS_SOCKET_PROTOCOL_TCP
 
-#define ICE_HASH_TABLE_BUCKET_COUNT  100
+#define ICE_HASH_TABLE_BUCKET_COUNT  50
 #define ICE_HASH_TABLE_BUCKET_LENGTH 2
 
 #define ICE_CANDIDATE_ID_LEN 8
@@ -213,8 +223,8 @@ struct __IceAgent {
     PDoubleList localCandidates;
     PDoubleList remoteCandidates;
     // store PIceCandidatePair which will be immediately checked for connectivity when the timer is fired.
-    PStackQueue triggeredCheckQueue;
-    PDoubleList iceCandidatePairs;
+    PStackQueue pTriggeredCheckQueue;
+    PDoubleList pIceCandidatePairs;
 
     PConnectionListener pConnectionListener;
     BOOL isControlling;

@@ -8,12 +8,23 @@ extern "C" {
 #endif
 
 #ifdef KVS_USE_OPENSSL
+// TBD
+#elif KVS_USE_MBEDTLS
+#include <mbedtls/ssl.h>
+#include <mbedtls/sha256.h>
+#include <mbedtls/md5.h>
+#include <mbedtls/error.h>
+#endif
+#ifdef KVS_USE_OPENSSL
 #define KVS_RSA_F4                  RSA_F4
 #define KVS_MD5_DIGEST_LENGTH       MD5_DIGEST_LENGTH
 #define KVS_SHA1_DIGEST_LENGTH      SHA_DIGEST_LENGTH
 #define KVS_MD5_DIGEST(m, mlen, ob) MD5((m), (mlen), (ob));
+#define KVS_HMAC(k, klen, m, mlen, ob, plen)                                                                                                         \
+    CHK(NULL != HMAC(EVP_sha256(), (k), (INT32)(klen), (m), (mlen), (ob), (plen)), STATUS_HMAC_GENERATION_ERROR);
 #define KVS_SHA1_HMAC(k, klen, m, mlen, ob, plen)                                                                                                    \
     CHK(NULL != HMAC(EVP_sha1(), (k), (INT32) (klen), (m), (mlen), (ob), (plen)), STATUS_HMAC_GENERATION_ERROR);
+#define KVS_SHA256(m, mlen, ob) SHA256((m), (mlen), (ob));
 #define KVS_CRYPTO_INIT()                                                                                                                            \
     do {                                                                                                                                             \
         OpenSSL_add_ssl_algorithms();                                                                                                                \
@@ -36,9 +47,13 @@ typedef enum {
 #define KVS_MD5_DIGEST_LENGTH       16
 #define KVS_SHA1_DIGEST_LENGTH      20
 #define KVS_MD5_DIGEST(m, mlen, ob) mbedtls_md5_ret((m), (mlen), (ob));
+#define KVS_HMAC(k, klen, m, mlen, ob, plen)                                                                                                         \
+    CHK(0 == mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), (k), (klen), (m), (mlen), (ob)), STATUS_HMAC_GENERATION_ERROR);           \
+    *(plen) = mbedtls_md_get_size(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256));
 #define KVS_SHA1_HMAC(k, klen, m, mlen, ob, plen)                                                                                                    \
     CHK(0 == mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA1), (k), (klen), (m), (mlen), (ob)), STATUS_HMAC_GENERATION_ERROR);             \
     *(plen) = mbedtls_md_get_size(mbedtls_md_info_from_type(MBEDTLS_MD_SHA1));
+#define KVS_SHA256(m, mlen, ob) mbedtls_sha256((m), (mlen), (ob), 0);
 #define KVS_CRYPTO_INIT()                                                                                                                            \
     do {                                                                                                                                             \
     } while (0)

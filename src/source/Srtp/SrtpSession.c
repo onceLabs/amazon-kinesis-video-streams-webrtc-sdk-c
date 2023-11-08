@@ -1,5 +1,5 @@
 #define LOG_CLASS "SRTP"
-#include "../Include_i.h"
+#include "SrtpSession.h"
 
 STATUS initSrtpSession(PBYTE receiveKey, PBYTE transmitKey, KVS_SRTP_PROFILE profile, PSrtpSession* ppSrtpSession)
 {
@@ -30,7 +30,7 @@ STATUS initSrtpSession(PBYTE receiveKey, PBYTE transmitKey, KVS_SRTP_PROFILE pro
             srtcp_policy_setter = srtp_crypto_policy_set_rtp_default;
             break;
         default:
-            CHK(FALSE, STATUS_SSL_UNKNOWN_SRTP_PROFILE);
+            CHK(FALSE, STATUS_DTLS_UNKNOWN_SRTP_PROFILE);
     }
 
     srtp_policy_setter(&receivePolicy.rtp);
@@ -114,7 +114,7 @@ STATUS decryptSrtcpPacket(PSrtpSession pSrtpSession, PVOID encryptedMessage, PIN
     srtp_err_status_t errStatus;
 
     CHK_ERR((errStatus = srtp_unprotect_rtcp(pSrtpSession->srtp_receive_session, encryptedMessage, len)) == srtp_err_status_ok,
-            STATUS_SRTP_DECRYPT_FAILED, "Decrypting rtcp packet failed with error code %u on srtp session %" PRIu64, errStatus,
+            STATUS_SRTCP_DECRYPT_FAILED, "Decrypting rtcp packet failed with error code %u on srtp session %" PRIu64, errStatus,
             pSrtpSession->srtp_receive_session);
 
 CleanUp:

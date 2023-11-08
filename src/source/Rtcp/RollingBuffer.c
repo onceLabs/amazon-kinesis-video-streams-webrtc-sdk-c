@@ -1,6 +1,6 @@
 #define LOG_CLASS "RollingBuffer"
 
-#include "../Include_i.h"
+#include "RollingBuffer.h"
 
 STATUS createRollingBuffer(UINT32 capacity, FreeDataFunc freeDataFunc, PRollingBuffer* ppRollingBuffer)
 {

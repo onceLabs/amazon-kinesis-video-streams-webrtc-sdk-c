@@ -5,11 +5,15 @@
 #ifndef __KINESIS_VIDEO_WEBRTC_CLIENT_SCTP_SCTP__
 #define __KINESIS_VIDEO_WEBRTC_CLIENT_SCTP_SCTP__
 
+#ifdef ENABLE_DATA_CHANNEL
+
 #pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include <usrsctp.h>
+#include "kvs/webrtc_client.h"
 
 // 1200 - 12 (SCTP header Size)
 #define SCTP_MTU                         1188
@@ -81,5 +85,6 @@ INT32 onSctpInboundPacket(struct socket*, union sctp_sockstore, PVOID, ULONG, st
 
 #ifdef __cplusplus
 }
+#endif
 #endif
 #endif //__KINESIS_VIDEO_WEBRTC_CLIENT_SCTP_SCTP__

@@ -1,6 +1,12 @@
 #define LOG_CLASS "RtcRtp"
 
-#include "../Include_i.h"
+#include "SessionDescription.h"
+#include "Rtp.h"
+#include "RtpVP8Payloader.h"
+#include "RtpH264Payloader.h"
+#include "RtpOpusPayloader.h"
+#include "RtpG711Payloader.h"
+#include "Time.h"
 
 typedef STATUS (*RtpPayloadFunc)(UINT32, PBYTE, UINT32, PBYTE, PUINT32, PUINT32, PUINT32);
 
@@ -11,7 +17,7 @@ STATUS createKvsRtpTransceiver(RTC_RTP_TRANSCEIVER_DIRECTION direction, PKvsPeer
     STATUS retStatus = STATUS_SUCCESS;
     PKvsRtpTransceiver pKvsRtpTransceiver = NULL;
 
-    CHK(ppKvsRtpTransceiver != NULL && pKvsPeerConnection != NULL && pRtcMediaStreamTrack != NULL, STATUS_NULL_ARG);
+    CHK(ppKvsRtpTransceiver != NULL && pKvsPeerConnection != NULL && pRtcMediaStreamTrack != NULL, STATUS_RTP_NULL_ARG);
 
     pKvsRtpTransceiver = (PKvsRtpTransceiver) MEMCALLOC(1, SIZEOF(KvsRtpTransceiver));
     CHK(pKvsRtpTransceiver != NULL, STATUS_NOT_ENOUGH_MEMORY);
@@ -60,7 +66,7 @@ STATUS freeKvsRtpTransceiver(PKvsRtpTransceiver* ppKvsRtpTransceiver)
     STATUS retStatus = STATUS_SUCCESS;
     PKvsRtpTransceiver pKvsRtpTransceiver = NULL;
 
-    CHK(ppKvsRtpTransceiver != NULL, STATUS_NULL_ARG);
+    CHK(ppKvsRtpTransceiver != NULL, STATUS_RTP_NULL_ARG);
     pKvsRtpTransceiver = *ppKvsRtpTransceiver;
     // free is idempotent
     CHK(pKvsRtpTransceiver != NULL, retStatus);
@@ -94,7 +100,7 @@ CleanUp:
 STATUS kvsRtpTransceiverSetJitterBuffer(PKvsRtpTransceiver pKvsRtpTransceiver, PJitterBuffer pJitterBuffer)
 {
     STATUS retStatus = STATUS_SUCCESS;
-    CHK(pKvsRtpTransceiver != NULL && pJitterBuffer != NULL, STATUS_NULL_ARG);
+    CHK(pKvsRtpTransceiver != NULL && pJitterBuffer != NULL, STATUS_RTP_NULL_ARG);
 
     pKvsRtpTransceiver->pJitterBuffer = pJitterBuffer;
 
@@ -109,7 +115,7 @@ STATUS transceiverOnFrame(PRtcRtpTransceiver pRtcRtpTransceiver, UINT64 customDa
     STATUS retStatus = STATUS_SUCCESS;
     PKvsRtpTransceiver pKvsRtpTransceiver = (PKvsRtpTransceiver) pRtcRtpTransceiver;
 
-    CHK(pKvsRtpTransceiver != NULL && rtcOnFrame != NULL, STATUS_NULL_ARG);
+    CHK(pKvsRtpTransceiver != NULL && rtcOnFrame != NULL, STATUS_RTP_NULL_ARG);
 
     pKvsRtpTransceiver->onFrame = rtcOnFrame;
     pKvsRtpTransceiver->onFrameCustomData = customData;
@@ -126,7 +132,7 @@ STATUS transceiverOnBandwidthEstimation(PRtcRtpTransceiver pRtcRtpTransceiver, U
     STATUS retStatus = STATUS_SUCCESS;
     PKvsRtpTransceiver pKvsRtpTransceiver = (PKvsRtpTransceiver) pRtcRtpTransceiver;
 
-    CHK(pKvsRtpTransceiver != NULL && rtcOnBandwidthEstimation != NULL, STATUS_NULL_ARG);
+    CHK(pKvsRtpTransceiver != NULL && rtcOnBandwidthEstimation != NULL, STATUS_RTP_NULL_ARG);
 
     pKvsRtpTransceiver->onBandwidthEstimation = rtcOnBandwidthEstimation;
     pKvsRtpTransceiver->onBandwidthEstimationCustomData = customData;
@@ -143,7 +149,7 @@ STATUS transceiverOnPictureLoss(PRtcRtpTransceiver pRtcRtpTransceiver, UINT64 cu
     STATUS retStatus = STATUS_SUCCESS;
     PKvsRtpTransceiver pKvsRtpTransceiver = (PKvsRtpTransceiver) pRtcRtpTransceiver;
 
-    CHK(pKvsRtpTransceiver != NULL && onPictureLoss != NULL, STATUS_NULL_ARG);
+    CHK(pKvsRtpTransceiver != NULL && onPictureLoss != NULL, STATUS_RTP_NULL_ARG);
 
     pKvsRtpTransceiver->onPictureLoss = onPictureLoss;
     pKvsRtpTransceiver->onPictureLossCustomData = customData;
@@ -158,7 +164,7 @@ STATUS updateEncoderStats(PRtcRtpTransceiver pRtcRtpTransceiver, PRtcEncoderStat
 {
     STATUS retStatus = STATUS_SUCCESS;
     PKvsRtpTransceiver pKvsRtpTransceiver = (PKvsRtpTransceiver) pRtcRtpTransceiver;
-    CHK(pKvsRtpTransceiver != NULL && encoderStats != NULL, STATUS_NULL_ARG);
+    CHK(pKvsRtpTransceiver != NULL && encoderStats != NULL, STATUS_RTP_NULL_ARG);
     MUTEX_LOCK(pKvsRtpTransceiver->statsLock);
     pKvsRtpTransceiver->outboundStats.totalEncodeTime += encoderStats->encodeTimeMsec;
     pKvsRtpTransceiver->outboundStats.targetBitrate = encoderStats->targetBitrate;
@@ -208,7 +214,7 @@ STATUS writeFrame(PRtcRtpTransceiver pRtcRtpTransceiver, PFrame pFrame)
     UINT32 extpayload;
     STATUS sendStatus;
 
-    CHK(pKvsRtpTransceiver != NULL && pFrame != NULL, STATUS_NULL_ARG);
+    CHK(pKvsRtpTransceiver != NULL && pFrame != NULL, STATUS_RTP_NULL_ARG);
     pKvsPeerConnection = pKvsRtpTransceiver->pKvsPeerConnection;
     pPayloadArray = &(pKvsRtpTransceiver->sender.payloadArray);
     if (MEDIA_STREAM_TRACK_KIND_VIDEO == pKvsRtpTransceiver->sender.track.kind) {
@@ -280,6 +286,7 @@ STATUS writeFrame(PRtcRtpTransceiver pRtcRtpTransceiver, PFrame pFrame)
     bufferAfterEncrypt = (pKvsRtpTransceiver->sender.payloadType == pKvsRtpTransceiver->sender.rtxPayloadType);
     for (i = 0; i < pPayloadArray->payloadSubLenSize; i++) {
         pRtpPacket = pPacketList + i;
+#ifdef ENABLE_TWCC_FUNCTION
         if (pKvsRtpTransceiver->pKvsPeerConnection->twccExtId != 0) {
             pRtpPacket->header.extension = TRUE;
             pRtpPacket->header.extensionProfile = TWCC_EXT_PROFILE;
@@ -288,6 +295,7 @@ STATUS writeFrame(PRtcRtpTransceiver pRtcRtpTransceiver, PFrame pFrame)
             extpayload = TWCC_PAYLOAD(pKvsRtpTransceiver->pKvsPeerConnection->twccExtId, twsn);
             pRtpPacket->header.extensionPayload = (PBYTE) &extpayload;
         }
+#endif
         // Get the required size first
         CHK_STATUS(createBytesFromRtpPacket(pRtpPacket, NULL, &packetLen));
 
@@ -304,16 +312,18 @@ STATUS writeFrame(PRtcRtpTransceiver pRtcRtpTransceiver, PFrame pFrame)
 
         CHK_STATUS(encryptRtpPacket(pKvsPeerConnection->pSrtpSession, rawPacket, (PINT32) &packetLen));
         sendStatus = iceAgentSendPacket(pKvsPeerConnection->pIceAgent, rawPacket, packetLen);
-        if (sendStatus == STATUS_SEND_DATA_FAILED) {
+        if (sendStatus == STATUS_NET_SEND_DATA_FAILED) {
             packetsDiscardedOnSend++;
             bytesDiscardedOnSend += packetLen - headerLen;
             // TODO is frame considered discarded when at least one of its packets is discarded or all of its packets discarded?
             framesDiscardedOnSend = 1;
             SAFE_MEMFREE(rawPacket);
             continue;
+#ifdef ENABLE_TWCC_FUNCTION
         } else if (sendStatus == STATUS_SUCCESS && pKvsRtpTransceiver->pKvsPeerConnection->twccExtId != 0) {
             pRtpPacket->sentTime = GETTIME();
             twccManagerOnPacketSent(pKvsPeerConnection, pRtpPacket);
+#endif
         }
         CHK_STATUS(sendStatus);
         if (bufferAfterEncrypt) {
@@ -392,7 +402,7 @@ STATUS writeRtpPacket(PKvsPeerConnection pKvsPeerConnection, PRtpPacket pRtpPack
     PBYTE pRawPacket = NULL;
     INT32 rawLen = 0;
 
-    CHK(pKvsPeerConnection != NULL && pRtpPacket != NULL && pRtpPacket->pRawPacket != NULL, STATUS_NULL_ARG);
+    CHK(pKvsPeerConnection != NULL && pRtpPacket != NULL && pRtpPacket->pRawPacket != NULL, STATUS_RTP_NULL_ARG);
 
     MUTEX_LOCK(pKvsPeerConnection->pSrtpSessionLock);
     locked = TRUE;
@@ -424,7 +434,7 @@ STATUS findTransceiverBySsrc(PKvsPeerConnection pKvsPeerConnection, PKvsRtpTrans
     PDoubleListNode pCurNode = NULL;
     UINT64 item = 0;
     PKvsRtpTransceiver pTransceiver = NULL;
-    CHK(pKvsPeerConnection != NULL && ppTransceiver != NULL, STATUS_NULL_ARG);
+    CHK(pKvsPeerConnection != NULL && ppTransceiver != NULL, STATUS_RTP_NULL_ARG);
 
     CHK_STATUS(doubleListGetHeadNode(pKvsPeerConnection->pTransceivers, &pCurNode));
     while (pCurNode != NULL) {

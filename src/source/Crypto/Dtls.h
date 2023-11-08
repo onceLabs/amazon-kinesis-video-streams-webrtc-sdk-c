@@ -10,6 +10,17 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "TimerQueue.h"
+#include "Crypto.h"
+#include "Network.h"
+#include "IOBuffer.h"
+
+#ifdef KVS_USE_OPENSSL
+// TBD
+#elif KVS_USE_MBEDTLS
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
+#endif
 
 #define MAX_SRTP_MASTER_KEY_LEN   16
 #define MAX_SRTP_SALT_KEY_LEN     14

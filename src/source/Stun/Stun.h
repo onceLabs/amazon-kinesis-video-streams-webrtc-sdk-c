@@ -10,6 +10,21 @@ StunPackager internal include file
 extern "C" {
 #endif
 
+#include "Endianness.h"
+#include "Crypto.h"
+#include "Network.h"
+
+// Max stun username attribute len: https://tools.ietf.org/html/rfc5389#section-15.3
+#define STUN_MAX_USERNAME_LEN (UINT16) 512
+
+// https://tools.ietf.org/html/rfc5389#section-15.7
+#define STUN_MAX_REALM_LEN (UINT16) 128
+
+// https://tools.ietf.org/html/rfc5389#section-15.8
+#define STUN_MAX_NONCE_LEN (UINT16) 128
+
+// https://tools.ietf.org/html/rfc5389#section-15.6
+#define STUN_MAX_ERROR_PHRASE_LEN (UINT16) 128
 /**
  * Stun header structure
  * - 2 UINT16 type len
