@@ -1,6 +1,6 @@
 #define LOG_CLASS "SignalingFileCache"
-#include "../Include_i.h"
-
+#include "FileIo.h"
+#include "FileCache.h"
 /****************************************************************************************************
  * Content of the caching file will look as follows:
  * channelName,role,region,channelARN,httpEndpoint,wssEndpoint,cacheCreationTimestamp\n
@@ -25,14 +25,14 @@ CleanUp:
 }
 
 STATUS deserializeSignalingCacheEntries(PCHAR cachedFileContent, UINT64 fileSize, PSignalingFileCacheEntry pSignalingFileCacheEntryList,
-                                        PUINT32 pEntryCount, PCHAR cacheFilePath)
+                                        PUINT32 pEntryCount)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     UINT32 listSize = 0, entryCount = 0, tokenCount = 0, remainingSize, tokenSize = 0;
     PCHAR pCurrent = NULL, nextToken = NULL, nextLine = NULL;
 
-    CHK(cachedFileContent != NULL && pSignalingFileCacheEntryList != NULL && pEntryCount != NULL && cacheFilePath != NULL, STATUS_NULL_ARG);
+    CHK(cachedFileContent != NULL && pSignalingFileCacheEntryList != NULL && pEntryCount != NULL, STATUS_SIGNALING_NULL_ARG);
     listSize = *pEntryCount;
 
     pCurrent = cachedFileContent;
@@ -106,8 +106,8 @@ CleanUp:
 
     CHK_LOG_ERR(retStatus);
 
-    if (STATUS_FAILED(retStatus) && cacheFilePath != NULL) {
-        FREMOVE(cacheFilePath);
+    if (STATUS_FAILED(retStatus)) {
+        FREMOVE(DEFAULT_SIGNALING_CACHE_FILE_PATH);
     }
 
     LEAVES();
@@ -115,38 +115,40 @@ CleanUp:
 }
 
 STATUS signalingCacheLoadFromFile(PCHAR channelName, PCHAR region, SIGNALING_CHANNEL_ROLE_TYPE role,
-                                  PSignalingFileCacheEntry pSignalingFileCacheEntry, PBOOL pCacheFound, PCHAR cacheFilePath)
+                                  PSignalingFileCacheEntry pSignalingFileCacheEntry, PBOOL pCacheFound)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     UINT64 fileSize = 0;
     PCHAR fileBuffer = NULL;
-    SignalingFileCacheEntry entries[MAX_SIGNALING_CACHE_ENTRY_COUNT];
-    UINT32 entryCount = ARRAY_SIZE(entries), i;
+    PSignalingFileCacheEntry pFileCacheEntries = NULL;
+    UINT32 entryCount = MAX_SIGNALING_CACHE_ENTRY_COUNT, i;
     BOOL cacheFound = FALSE;
 
-    CHK(channelName != NULL && region != NULL && pSignalingFileCacheEntry != NULL && pCacheFound != NULL && cacheFilePath != NULL, STATUS_NULL_ARG);
+    CHK(channelName != NULL && region != NULL && pSignalingFileCacheEntry != NULL && pCacheFound != NULL, STATUS_SIGNALING_NULL_ARG);
     CHK(!IS_EMPTY_STRING(channelName) && !IS_EMPTY_STRING(region), STATUS_INVALID_ARG);
 
-    CHK_STATUS(createFileIfNotExist(cacheFilePath));
+    CHK(NULL != (pFileCacheEntries = (PSignalingFileCacheEntry) MEMCALLOC(MAX_SIGNALING_CACHE_ENTRY_COUNT, SIZEOF(SignalingFileCacheEntry))),
+        STATUS_SIGNALING_NOT_ENOUGH_MEMORY);
 
-    MEMSET(entries, 0x00, SIZEOF(entries));
+    CHK_STATUS(createFileIfNotExist(DEFAULT_SIGNALING_CACHE_FILE_PATH));
 
-    CHK_STATUS(readFile(cacheFilePath, FALSE, NULL, &fileSize));
+    CHK_STATUS(readFile(DEFAULT_SIGNALING_CACHE_FILE_PATH, FALSE, NULL, &fileSize));
 
     if (fileSize > 0) {
         /* +1 for null terminator */
         fileBuffer = MEMCALLOC(1, (fileSize + 1) * SIZEOF(CHAR));
         CHK(fileBuffer != NULL, STATUS_NOT_ENOUGH_MEMORY);
-        CHK_STATUS(readFile(cacheFilePath, FALSE, (PBYTE) fileBuffer, &fileSize));
+        CHK_STATUS(readFile(DEFAULT_SIGNALING_CACHE_FILE_PATH, FALSE, (PBYTE) fileBuffer, &fileSize));
 
-        CHK_STATUS(deserializeSignalingCacheEntries(fileBuffer, fileSize, entries, &entryCount, cacheFilePath));
+        CHK_STATUS(deserializeSignalingCacheEntries(fileBuffer, fileSize, pFileCacheEntries, &entryCount));
 
         for (i = 0; !cacheFound && i < entryCount; ++i) {
             /* Assume channel name and region has been validated */
-            if (STRCMP(entries[i].channelName, channelName) == 0 && STRCMP(entries[i].region, region) == 0 && entries[i].role == role) {
+            if (STRCMP(pFileCacheEntries[i].channelName, channelName) == 0 && STRCMP(pFileCacheEntries[i].region, region) == 0 &&
+                pFileCacheEntries[i].role == role) {
                 cacheFound = TRUE;
-                *pSignalingFileCacheEntry = entries[i];
+                *pSignalingFileCacheEntry = pFileCacheEntries[i];
             }
         }
     }
@@ -155,6 +157,7 @@ STATUS signalingCacheLoadFromFile(PCHAR channelName, PCHAR region, SIGNALING_CHA
 
 CleanUp:
 
+    SAFE_MEMFREE(pFileCacheEntries);
     SAFE_MEMFREE(fileBuffer);
 
     CHK_LOG_ERR(retStatus);
@@ -163,74 +166,76 @@ CleanUp:
     return retStatus;
 }
 
-STATUS signalingCacheSaveToFile(PSignalingFileCacheEntry pSignalingFileCacheEntry, PCHAR cacheFilePath)
+STATUS signalingCacheSaveToFile(PSignalingFileCacheEntry pSignalingFileCacheEntry)
 {
     ENTERS();
 
     STATUS retStatus = STATUS_SUCCESS;
-    SignalingFileCacheEntry entries[MAX_SIGNALING_CACHE_ENTRY_COUNT];
-    UINT32 entryCount = ARRAY_SIZE(entries), i, serializedCacheEntryLen;
+    PSignalingFileCacheEntry pFileCacheEntries = NULL;
+    UINT32 entryCount = MAX_SIGNALING_CACHE_ENTRY_COUNT, i, serializedCacheEntryLen;
     UINT64 fileSize = 0;
     PCHAR fileBuffer = NULL;
-    BOOL newEntry = TRUE;
-    CHAR serializedCacheEntry[MAX_SERIALIZED_SIGNALING_CACHE_ENTRY_LEN];
+    PSignalingFileCacheEntry pExistingCacheEntry = NULL;
+    PCHAR pSerializedCacheEntries = NULL;
 
-    CHK(cacheFilePath != NULL && pSignalingFileCacheEntry != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingFileCacheEntry != NULL, STATUS_SIGNALING_NULL_ARG);
     CHK(!IS_EMPTY_STRING(pSignalingFileCacheEntry->channelArn) && !IS_EMPTY_STRING(pSignalingFileCacheEntry->channelName) &&
             !IS_EMPTY_STRING(pSignalingFileCacheEntry->region) && !IS_EMPTY_STRING(pSignalingFileCacheEntry->httpsEndpoint) &&
             !IS_EMPTY_STRING(pSignalingFileCacheEntry->wssEndpoint),
         STATUS_INVALID_ARG);
 
-    MEMSET(entries, 0x00, SIZEOF(entries));
+    CHK(NULL != (pFileCacheEntries = (PSignalingFileCacheEntry) MEMCALLOC(MAX_SIGNALING_CACHE_ENTRY_COUNT, SIZEOF(SignalingFileCacheEntry))),
+        STATUS_SIGNALING_NOT_ENOUGH_MEMORY);
+    CHK(NULL != (pSerializedCacheEntries = (PCHAR) MEMCALLOC(MAX_SERIALIZED_SIGNALING_CACHE_ENTRY_LEN, SIZEOF(CHAR))),
+        STATUS_SIGNALING_NOT_ENOUGH_MEMORY);
 
-    CHK_STATUS(createFileIfNotExist(cacheFilePath));
+    CHK_STATUS(createFileIfNotExist(DEFAULT_SIGNALING_CACHE_FILE_PATH));
 
     /* read entire file into buffer */
-    CHK_STATUS(readFile(cacheFilePath, FALSE, NULL, &fileSize));
+    CHK_STATUS(readFile(DEFAULT_SIGNALING_CACHE_FILE_PATH, FALSE, NULL, &fileSize));
     /* deserialize if file is not empty */
     if (fileSize > 0) {
         /* +1 for null terminator */
         fileBuffer = MEMCALLOC(1, (fileSize + 1) * SIZEOF(CHAR));
         CHK(fileBuffer != NULL, STATUS_NOT_ENOUGH_MEMORY);
-        CHK_STATUS(readFile(cacheFilePath, FALSE, (PBYTE) fileBuffer, &fileSize));
+        CHK_STATUS(readFile(DEFAULT_SIGNALING_CACHE_FILE_PATH, FALSE, (PBYTE) fileBuffer, &fileSize));
 
-        CHK_STATUS(deserializeSignalingCacheEntries(fileBuffer, fileSize, entries, &entryCount, cacheFilePath));
+        CHK_STATUS(deserializeSignalingCacheEntries(fileBuffer, fileSize, pFileCacheEntries, &entryCount));
     } else {
         entryCount = 0;
     }
 
-    for (i = 0; i < entryCount; ++i) {
+    for (i = 0; pExistingCacheEntry == NULL && i < entryCount; ++i) {
         /* Assume channel name and region has been validated */
-        if (STRCMP(entries[i].channelName, pSignalingFileCacheEntry->channelName) == 0 &&
-            STRCMP(entries[i].region, pSignalingFileCacheEntry->region) == 0 && entries[i].role == pSignalingFileCacheEntry->role) {
-            newEntry = FALSE;
-            break;
+        if (STRCMP(pFileCacheEntries[i].channelName, pSignalingFileCacheEntry->channelName) == 0 &&
+            STRCMP(pFileCacheEntries[i].region, pSignalingFileCacheEntry->region) == 0 &&
+            pFileCacheEntries[i].role == pSignalingFileCacheEntry->role) {
+            pExistingCacheEntry = &pFileCacheEntries[i];
         }
     }
 
     /* at this point i is at most entryCount */
-    if (entryCount >= MAX_SIGNALING_CACHE_ENTRY_COUNT) {
-        DLOGW("Overwrote 32nd entry to store signaling cache because max entry count of %u reached", MAX_SIGNALING_CACHE_ENTRY_COUNT);
-        i = MAX_SIGNALING_CACHE_ENTRY_COUNT - 1;
-        newEntry = FALSE;
-    }
+    CHK_WARN(entryCount < MAX_SIGNALING_CACHE_ENTRY_COUNT, STATUS_INVALID_OPERATION,
+             "Failed to store signaling cache because max entry count of %u reached", MAX_SIGNALING_CACHE_ENTRY_COUNT);
 
-    entries[i] = *pSignalingFileCacheEntry;
-    if (newEntry) {
-        entryCount++;
-    }
+    pFileCacheEntries[i] = *pSignalingFileCacheEntry;
+    entryCount++;
 
     for (i = 0; i < entryCount; ++i) {
-        serializedCacheEntryLen =
-            SNPRINTF(serializedCacheEntry, ARRAY_SIZE(serializedCacheEntry), "%s,%s,%s,%s,%s,%s,%.10" PRIu64 "\n", entries[i].channelName,
-                     entries[i].role == SIGNALING_CHANNEL_ROLE_TYPE_MASTER ? SIGNALING_FILE_CACHE_ROLE_TYPE_MASTER_STR
-                                                                           : SIGNALING_FILE_CACHE_ROLE_TYPE_VIEWER_STR,
-                     entries[i].region, entries[i].channelArn, entries[i].httpsEndpoint, entries[i].wssEndpoint, entries[i].creationTsEpochSeconds);
-        CHK_STATUS(writeFile(cacheFilePath, FALSE, i == 0 ? FALSE : TRUE, (PBYTE) serializedCacheEntry, serializedCacheEntryLen));
+        serializedCacheEntryLen = SNPRINTF(
+            pSerializedCacheEntries, MAX_SERIALIZED_SIGNALING_CACHE_ENTRY_LEN, "%s,%s,%s,%s,%s,%s,%.10" PRIu64 "\n", pFileCacheEntries[i].channelName,
+            pFileCacheEntries[i].role == SIGNALING_CHANNEL_ROLE_TYPE_MASTER ? SIGNALING_FILE_CACHE_ROLE_TYPE_MASTER_STR
+                                                                            : SIGNALING_FILE_CACHE_ROLE_TYPE_VIEWER_STR,
+            pFileCacheEntries[i].region, pFileCacheEntries[i].channelArn, pFileCacheEntries[i].httpsEndpoint, pFileCacheEntries[i].wssEndpoint,
+            pFileCacheEntries[i].creationTsEpochSeconds);
+        CHK_STATUS(
+            writeFile(DEFAULT_SIGNALING_CACHE_FILE_PATH, FALSE, i == 0 ? FALSE : TRUE, (PBYTE) pSerializedCacheEntries, serializedCacheEntryLen));
     }
 
 CleanUp:
 
+    SAFE_MEMFREE(pFileCacheEntries);
+    SAFE_MEMFREE(pSerializedCacheEntries);
     SAFE_MEMFREE(fileBuffer);
 
     CHK_LOG_ERR(retStatus);

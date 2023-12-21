@@ -1,6 +1,7 @@
 #define LOG_CLASS "Retransmitter"
 
-#include "../Include_i.h"
+#include "RtpPacket.h"
+#include "Rtp.h"
 
 STATUS createRetransmitter(UINT32 seqNumListLen, UINT32 validIndexListLen, PRetransmitter* ppRetransmitter)
 {
@@ -99,7 +100,9 @@ STATUS resendPacketOnNack(PRtcpPacket pRtcpPacket, PKvsPeerConnection pKvsPeerCo
                 retransmittedPacketsSent++;
                 retransmittedBytesSent += pRtpPacket->rawPacketLength - RTP_HEADER_LEN(pRtpPacket);
                 DLOGV("Resent packet ssrc %lu seq %lu succeeded", pRtpPacket->header.ssrc, pRtpPacket->header.sequenceNumber);
+#ifdef ENABLE_TWCC_FUNCTION
                 twccManagerOnPacketSent(pKvsPeerConnection, pRtpPacket);
+#endif
             } else {
                 DLOGV("Resent packet ssrc %lu seq %lu failed 0x%08x", pRtpPacket->header.ssrc, pRtpPacket->header.sequenceNumber, retStatus);
             }

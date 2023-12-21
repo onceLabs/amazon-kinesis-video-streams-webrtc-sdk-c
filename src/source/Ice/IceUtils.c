@@ -3,6 +3,8 @@
  */
 #define LOG_CLASS "IceUtils"
 #include "../Include_i.h"
+#include "Endianness.h"
+#include "TurnConnection.h"
 
 STATUS createTransactionIdStore(UINT32 maxIdCount, PTransactionIdStore* ppTransactionIdStore)
 {
@@ -10,11 +12,11 @@ STATUS createTransactionIdStore(UINT32 maxIdCount, PTransactionIdStore* ppTransa
     STATUS retStatus = STATUS_SUCCESS;
     PTransactionIdStore pTransactionIdStore = NULL;
 
-    CHK(ppTransactionIdStore != NULL, STATUS_NULL_ARG);
-    CHK(maxIdCount < MAX_STORED_TRANSACTION_ID_COUNT && maxIdCount > 0, STATUS_INVALID_ARG);
+    CHK(ppTransactionIdStore != NULL, STATUS_ICE_UTILS_NULL_ARG);
+    CHK(maxIdCount < MAX_STORED_TRANSACTION_ID_COUNT && maxIdCount > 0, STATUS_ICE_UTILS_NULL_ARG);
 
     pTransactionIdStore = (PTransactionIdStore) MEMCALLOC(1, SIZEOF(TransactionIdStore) + STUN_TRANSACTION_ID_LEN * maxIdCount);
-    CHK(pTransactionIdStore != NULL, STATUS_NOT_ENOUGH_MEMORY);
+    CHK(pTransactionIdStore != NULL, STATUS_ICE_UTILS_NOT_ENOUGH_MEMORY);
 
     pTransactionIdStore->transactionIds = (PBYTE) (pTransactionIdStore + 1);
     pTransactionIdStore->maxTransactionIdsCount = maxIdCount;
@@ -164,13 +166,14 @@ STATUS iceUtilsSendStunPacket(PStunPacket pStunPacket, PBYTE password, UINT32 pa
 {
     STATUS retStatus = STATUS_SUCCESS;
     UINT32 stunPacketSize = STUN_PACKET_ALLOCATION_SIZE;
-    BYTE stunPacketBuffer[STUN_PACKET_ALLOCATION_SIZE];
+    PBYTE stunPacketBuffer = NULL;
 
+    CHK(NULL != (stunPacketBuffer = (PBYTE) MEMALLOC(STUN_PACKET_ALLOCATION_SIZE)), STATUS_ICE_UTILS_EMPTY_STUN_SEND_BUF);
     CHK_STATUS(iceUtilsPackageStunPacket(pStunPacket, password, passwordLen, stunPacketBuffer, &stunPacketSize));
     CHK_STATUS(iceUtilsSendData(stunPacketBuffer, stunPacketSize, pDest, pSocketConnection, pTurnConnection, useTurn));
 
 CleanUp:
-
+    SAFE_MEMFREE(stunPacketBuffer);
     CHK_LOG_ERR(retStatus);
 
     return retStatus;
@@ -190,7 +193,7 @@ STATUS iceUtilsSendData(PBYTE buffer, UINT32 size, PKvsIpAddress pDest, PSocketC
     }
 
     // Fix-up the not-yet-ready socket
-    CHK(STATUS_SUCCEEDED(retStatus) || retStatus == STATUS_SOCKET_CONNECTION_NOT_READY_TO_SEND, retStatus);
+    CHK(STATUS_SUCCEEDED(retStatus) || retStatus == STATUS_TLS_CONNECTION_NOT_READY_TO_SEND, retStatus);
     retStatus = STATUS_SUCCESS;
 
 CleanUp:
@@ -215,8 +218,8 @@ STATUS parseIceServer(PIceServer pIceServer, PCHAR url, PCHAR username, PCHAR cr
         pIceServer->isTurn = FALSE;
     } else if (STRNCMP(ICE_URL_PREFIX_TURN, url, STRLEN(ICE_URL_PREFIX_TURN)) == 0 ||
                STRNCMP(ICE_URL_PREFIX_TURN_SECURE, url, STRLEN(ICE_URL_PREFIX_TURN_SECURE)) == 0) {
-        CHK(username != NULL && username[0] != '\0', STATUS_ICE_URL_TURN_MISSING_USERNAME);
-        CHK(credential != NULL && credential[0] != '\0', STATUS_ICE_URL_TURN_MISSING_CREDENTIAL);
+        CHK(username != NULL && username[0] != '\0', STATUS_ICE_UTILS_URL_TURN_MISSING_USERNAME);
+        CHK(credential != NULL && credential[0] != '\0', STATUS_ICE_UTILS_URL_TURN_MISSING_CREDENTIAL);
 
         // TODO after getIceServerConfig no longer give turn: ips, do TLS only for turns:
         STRNCPY(pIceServer->username, username, MAX_ICE_CONFIG_USER_NAME_LEN);
@@ -233,7 +236,7 @@ STATUS parseIceServer(PIceServer pIceServer, PCHAR url, PCHAR username, PCHAR cr
         }
 
     } else {
-        CHK(FALSE, STATUS_ICE_URL_INVALID_PREFIX);
+        CHK(FALSE, STATUS_ICE_UTILS_URL_INVALID_PREFIX);
     }
 
     if ((separator = STRCHR(urlNoPrefix, ':')) != NULL) {

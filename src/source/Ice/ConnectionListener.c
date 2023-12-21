@@ -2,7 +2,12 @@
  * Kinesis Video Producer ConnectionListener
  */
 #define LOG_CLASS "ConnectionListener"
-#include "../Include_i.h"
+
+#include <sys/socket.h>
+#include <netdb.h>
+#include "ConnectionListener.h"
+#include "IceAgent.h"
+#include "IceUtils.h"
 
 STATUS createConnectionListener(PConnectionListener* ppConnectionListener)
 {
@@ -26,13 +31,6 @@ STATUS createConnectionListener(PConnectionListener* ppConnectionListener)
     pConnectionListener->pBuffer = (PBYTE) (pConnectionListener + 1);
     pConnectionListener->bufferLen = MAX_UDP_PACKET_SIZE;
 
-    // TODO add support for windows socketpair
-#ifndef _WIN32
-    pConnectionListener->kickSocket[CONNECTION_LISTENER_KICK_SOCKET_LISTEN] = -1;
-    pConnectionListener->kickSocket[CONNECTION_LISTENER_KICK_SOCKET_WRITE] = -1;
-    CHK_STATUS(createSocketPair(&(pConnectionListener->kickSocket)));
-#endif
-
 CleanUp:
 
     if (STATUS_FAILED(retStatus) && pConnectionListener != NULL) {
@@ -51,8 +49,9 @@ STATUS freeConnectionListener(PConnectionListener* ppConnectionListener)
 {
     STATUS retStatus = STATUS_SUCCESS;
     PConnectionListener pConnectionListener = NULL;
+    UINT64 timeToWait;
     TID threadId;
-    const char* msg = "1";
+    BOOL threadTerminated = FALSE;
 
     CHK(ppConnectionListener != NULL, STATUS_NULL_ARG);
     CHK(*ppConnectionListener != NULL, retStatus);
@@ -60,36 +59,30 @@ STATUS freeConnectionListener(PConnectionListener* ppConnectionListener)
     pConnectionListener = *ppConnectionListener;
 
     ATOMIC_STORE_BOOL(&pConnectionListener->terminate, TRUE);
-
     if (IS_VALID_MUTEX_VALUE(pConnectionListener->lock)) {
-        MUTEX_LOCK(pConnectionListener->lock);
-        threadId = pConnectionListener->receiveDataRoutine;
-        MUTEX_UNLOCK(pConnectionListener->lock);
+        // Try to await for the thread to finish up
+        // NOTE: As TID is not atomic we need to wrap the read in locks
+        timeToWait = GETTIME() + CONNECTION_LISTENER_SHUTDOWN_TIMEOUT;
+        do {
+            MUTEX_LOCK(pConnectionListener->lock);
+            threadId = pConnectionListener->receiveDataRoutine;
+            MUTEX_UNLOCK(pConnectionListener->lock);
+            if (!IS_VALID_TID_VALUE(threadId)) {
+                threadTerminated = TRUE;
+            }
 
-        // TODO add support for windows socketpair
-        // This writes to the socketpair, kicking the POLL() out early,
-        // otherwise wait for the POLL to timeout
-#ifndef _WIN32
-        socketWrite(pConnectionListener->kickSocket[CONNECTION_LISTENER_KICK_SOCKET_WRITE], msg, STRLEN(msg));
-#endif
-
-        // wait for thread to finish.
-        if (IS_VALID_TID_VALUE(threadId)) {
-            THREAD_JOIN(pConnectionListener->receiveDataRoutine, NULL);
+            // Allow the thread to finish and exit
+            if (!threadTerminated) {
+                THREAD_SLEEP(KVS_ICE_SHORT_CHECK_DELAY);
+            }
+        } while (!threadTerminated && GETTIME() < timeToWait);
+        if (!threadTerminated) {
+            DLOGW("Connection listener handler thread shutdown timed out");
         }
 
         MUTEX_FREE(pConnectionListener->lock);
+        pConnectionListener->lock = INVALID_MUTEX_VALUE;
     }
-
-    // TODO add support for windows socketpair
-#ifndef _WIN32
-    if (pConnectionListener->kickSocket[CONNECTION_LISTENER_KICK_SOCKET_LISTEN] != -1) {
-        closeSocket(pConnectionListener->kickSocket[CONNECTION_LISTENER_KICK_SOCKET_LISTEN]);
-    }
-    if (pConnectionListener->kickSocket[CONNECTION_LISTENER_KICK_SOCKET_WRITE] != -1) {
-        closeSocket(pConnectionListener->kickSocket[CONNECTION_LISTENER_KICK_SOCKET_WRITE]);
-    }
-#endif
 
     MEMFREE(pConnectionListener);
 
@@ -133,6 +126,10 @@ CleanUp:
 
     if (locked) {
         MUTEX_UNLOCK(pConnectionListener->lock);
+    }
+
+    if (iterate == TRUE) {
+        DLOGW("the limit of socket sonnections is reached.");
     }
 
     return retStatus;
@@ -214,7 +211,8 @@ STATUS connectionListenerStart(PConnectionListener pConnectionListener)
     locked = TRUE;
 
     CHK(!IS_VALID_TID_VALUE(pConnectionListener->receiveDataRoutine), retStatus);
-    CHK_STATUS(THREAD_CREATE(&pConnectionListener->receiveDataRoutine, connectionListenerReceiveDataRoutine, (PVOID) pConnectionListener));
+    CHK_STATUS(THREAD_CREATE_EX(&pConnectionListener->receiveDataRoutine, CONN_LISTENER_THREAD_NAME, CONN_LISTENER_THREAD_SIZE, FALSE,
+                                connectionListenerReceiveDataRoutine, (PVOID) pConnectionListener));
 
 CleanUp:
 
@@ -236,18 +234,18 @@ BOOL canReadFd(INT32 fd, struct pollfd* fds, INT32 nfds)
     return FALSE;
 }
 
-PVOID connectionListenerReceiveDataRoutine(PVOID arg)
+PVOID connectionListenerReceiveDataRoutine(PVOID pArg)
 {
     STATUS retStatus = STATUS_SUCCESS;
-    PConnectionListener pConnectionListener = (PConnectionListener) arg;
+    PConnectionListener pConnectionListener = (PConnectionListener) pArg;
     PSocketConnection pSocketConnection;
     BOOL iterate = TRUE;
     PSocketConnection sockets[CONNECTION_LISTENER_DEFAULT_MAX_LISTENING_CONNECTION];
     UINT32 i, socketCount;
 
     INT32 nfds = 0;
-    //+1 added for the pipe() to kickout poll()
-    struct pollfd rfds[CONNECTION_LISTENER_DEFAULT_MAX_LISTENING_CONNECTION + 1];
+    fd_set rfds;
+    struct timeval tv;
     INT32 retval, localSocket;
     INT64 readLen;
     // the source address is put here. sockaddr_storage can hold either sockaddr_in or sockaddr_in6
@@ -263,11 +261,12 @@ PVOID connectionListenerReceiveDataRoutine(PVOID arg)
     /* Ensure that memory sanitizers consider
      * rfds initialized even if FD_ZERO is
      * implemented in assembly. */
-    MEMSET(&rfds, 0x00, SIZEOF(rfds));
+    MEMSET(&rfds, 0x00, SIZEOF(fd_set));
 
     srcAddr.isPointToPoint = FALSE;
-
+    DLOGD("Connection listener is up.");
     while (!ATOMIC_LOAD_BOOL(&pConnectionListener->terminate)) {
+        FD_ZERO(&rfds);
         nfds = 0;
 
         // Perform the socket connection gathering under the lock
@@ -281,13 +280,8 @@ PVOID connectionListenerReceiveDataRoutine(PVOID arg)
                     MUTEX_LOCK(pSocketConnection->lock);
                     localSocket = pSocketConnection->localSocket;
                     MUTEX_UNLOCK(pSocketConnection->lock);
-                    rfds[nfds].fd = localSocket;
-                    rfds[nfds].events = POLLIN | POLLPRI;
-#ifdef _WIN32
-                    rfds[nfds].events &= ~POLLPRI;
-#endif
-                    rfds[nfds].revents = 0;
-                    nfds++;
+                    FD_SET(localSocket, &rfds);
+                    nfds = MAX(nfds, localSocket);
 
                     // Store the sockets locally while in use and mark it as in use
                     sockets[socketCount++] = pSocketConnection;
@@ -300,27 +294,24 @@ PVOID connectionListenerReceiveDataRoutine(PVOID arg)
             }
         }
 
+        // Should be one more than the sockets count per API documentation
+        nfds++;
+
         // Need to unlock the mutex to ensure other racing threads unblock
         MUTEX_UNLOCK(pConnectionListener->lock);
-        retval = 0;
-        if (nfds != 0) {
-            // TODO add support for socketpair() in windows
-            // This end of the socketpair has been added to the list of sockets polled
-            // in order to have a way to end the poll early from the destructor
-#ifndef _WIN32
-            rfds[nfds].fd = pConnectionListener->kickSocket[CONNECTION_LISTENER_KICK_SOCKET_LISTEN];
-            rfds[nfds].events = POLLIN;
-            rfds[nfds].revents = 0;
-            nfds++;
-#endif
-            // blocking call until resolves as a timeout, an error, a signal or data received
-            retval = POLL(rfds, nfds, CONNECTION_LISTENER_SOCKET_WAIT_FOR_DATA_TIMEOUT / HUNDREDS_OF_NANOS_IN_A_MILLISECOND);
-        }
+
+        // timeout select every SOCKET_WAIT_FOR_DATA_TIMEOUT_SECONDS seconds and check if terminate
+        // on linux tv need to be reinitialized after select is done.
+        tv.tv_sec = 0;
+        tv.tv_usec = CONNECTION_LISTENER_SOCKET_WAIT_FOR_DATA_TIMEOUT / HUNDREDS_OF_NANOS_IN_A_MICROSECOND;
+
+        // blocking call until resolves as a timeout, an error, a signal or data received
+        retval = select(nfds, &rfds, NULL, NULL, &tv);
 
         // In case of 0 we have a timeout and should re-lock to allow for other
         // interlocking operations to proceed. A positive return means we received data
         if (retval == -1) {
-            DLOGW("poll() failed with errno %s", getErrorString(getErrorCode()));
+            DLOGW("select() failed with errno %s", getErrorString(getErrorCode()));
         } else if (retval > 0) {
             for (i = 0; i < socketCount; i++) {
                 pSocketConnection = sockets[i];
@@ -329,7 +320,7 @@ PVOID connectionListenerReceiveDataRoutine(PVOID arg)
                     localSocket = pSocketConnection->localSocket;
                     MUTEX_UNLOCK(pSocketConnection->lock);
 
-                    if (canReadFd(localSocket, rfds, nfds)) {
+                    if (FD_ISSET(localSocket, &rfds)) {
                         iterate = TRUE;
                         while (iterate) {
                             readLen = recvfrom(localSocket, pConnectionListener->pBuffer, pConnectionListener->bufferLen, 0,
@@ -398,7 +389,18 @@ PVOID connectionListenerReceiveDataRoutine(PVOID arg)
 
 CleanUp:
 
-    CHK_LOG_ERR(retStatus);
+    // The check for valid mutex is necessary because when we're in freeConnectionListener
+    // we may free the mutex in another thread so by the time we get here accessing the lock
+    // will result in accessing a resource after it has been freed
+    if (pConnectionListener != NULL && IS_VALID_MUTEX_VALUE(pConnectionListener->lock)) {
+        // As TID is 64 bit we can't atomically update it and need to do it under the lock
+        MUTEX_LOCK(pConnectionListener->lock);
+        pConnectionListener->receiveDataRoutine = INVALID_TID_VALUE;
+        MUTEX_UNLOCK(pConnectionListener->lock);
+    }
 
+    CHK_LOG_ERR(retStatus);
+    DLOGD("Connection listener is down.");
+    THREAD_EXIT(NULL);
     return (PVOID) (ULONG_PTR) retStatus;
 }

@@ -9,6 +9,8 @@ RTCP Packet include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "kvs/error.h"
+#include "kvs/common_defs.h"
 
 #define RTCP_PACKET_LEN_OFFSET  2
 #define RTCP_PACKET_TYPE_OFFSET 1
@@ -37,12 +39,14 @@ extern "C" {
 #define RTCP_FIRST_REPORT_DELAY (3 * HUNDREDS_OF_NANOS_IN_A_SECOND)
 
 typedef enum {
-    RTCP_PACKET_TYPE_FIR = 192, // https://tools.ietf.org/html/rfc2032#section-5.2.1
-    RTCP_PACKET_TYPE_SENDER_REPORT = 200,
-    RTCP_PACKET_TYPE_RECEIVER_REPORT = 201, // https://tools.ietf.org/html/rfc3550#section-6.4.2
-    RTCP_PACKET_TYPE_SOURCE_DESCRIPTION = 202,
-    RTCP_PACKET_TYPE_GENERIC_RTP_FEEDBACK = 205,
-    RTCP_PACKET_TYPE_PAYLOAD_SPECIFIC_FEEDBACK = 206,
+    RTCP_PACKET_TYPE_FIR = 192,                  // https://tools.ietf.org/html/rfc2032#section-5.2.1
+    RTCP_PACKET_TYPE_SENDER_REPORT = 200,        //!< SR: Sender Report RTCP Packet, https://datatracker.ietf.org/doc/html/rfc3550#section-6.4.1
+    RTCP_PACKET_TYPE_RECEIVER_REPORT = 201,      //!< RR: Receiver Report RTCP Packet, https://tools.ietf.org/html/rfc3550#section-6.4.2
+    RTCP_PACKET_TYPE_SOURCE_DESCRIPTION = 202,   //!< SDES: Source Description RTCP Packet, https://datatracker.ietf.org/doc/html/rfc3550#section-6.5
+    RTCP_PACKET_TYPE_BYTE = 203,                 //!< BYE: Goodbye RTCP Packet, https://datatracker.ietf.org/doc/html/rfc3550#section-6.6
+    RTCP_PACKET_TYPE_APP = 204,                  //!< APP: Application-Defined RTCP Packet, https://datatracker.ietf.org/doc/html/rfc3550#section-6.7
+    RTCP_PACKET_TYPE_GENERIC_RTP_FEEDBACK = 205, //!< Generic RTP Feedback.
+    RTCP_PACKET_TYPE_PAYLOAD_SPECIFIC_FEEDBACK = 206, //!< Payload-specific Feedback, PSFB.
 } RTCP_PACKET_TYPE;
 
 typedef enum {

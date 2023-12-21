@@ -2,7 +2,6 @@
  * Kinesis Video TLS
  */
 #define LOG_CLASS "TLS_openssl"
-#include "../Include_i.h"
 
 STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSession)
 {
@@ -10,7 +9,7 @@ STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSessi
     STATUS retStatus = STATUS_SUCCESS;
     PTlsSession pTlsSession = NULL;
 
-    CHK(ppTlsSession != NULL && pCallbacks != NULL, STATUS_NULL_ARG);
+    CHK(ppTlsSession != NULL && pCallbacks != NULL, STATUS_TLS_NULL_ARG);
     CHK(pCallbacks->outboundPacketFn != NULL, STATUS_INVALID_ARG);
 
     pTlsSession = MEMCALLOC(1, SIZEOF(TlsSession));
@@ -38,7 +37,7 @@ STATUS freeTlsSession(PTlsSession* ppTlsSession)
     STATUS retStatus = STATUS_SUCCESS;
     PTlsSession pTlsSession = NULL;
 
-    CHK(ppTlsSession != NULL, STATUS_NULL_ARG);
+    CHK(ppTlsSession != NULL, STATUS_TLS_NULL_ARG);
 
     pTlsSession = *ppTlsSession;
     CHK(pTlsSession != NULL, retStatus);
@@ -73,18 +72,18 @@ STATUS tlsSessionStart(PTlsSession pTlsSession, BOOL isServer)
     BIO *pReadBio = NULL, *pWriteBio = NULL;
     BOOL freeBios = TRUE;
 
-    CHK(pTlsSession != NULL, STATUS_NULL_ARG);
+    CHK(pTlsSession != NULL, STATUS_TLS_NULL_ARG);
     CHK(pTlsSession->state == TLS_SESSION_STATE_NEW, retStatus);
 
     pTlsSession->pSslCtx = SSL_CTX_new(SSLv23_method());
-    CHK(pTlsSession->pSslCtx != NULL, STATUS_SSL_CTX_CREATION_FAILED);
+    CHK(pTlsSession->pSslCtx != NULL, STATUS_TLS_SSL_CTX_CREATION_FAILED);
 
     SSL_CTX_set_read_ahead(pTlsSession->pSslCtx, 1);
     SSL_CTX_set_verify(pTlsSession->pSslCtx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, tlsSessionCertificateVerifyCallback);
-    CHK(SSL_CTX_set_cipher_list(pTlsSession->pSslCtx, "HIGH:!aNULL:!MD5:!RC4"), STATUS_SSL_CTX_CREATION_FAILED);
+    CHK(SSL_CTX_set_cipher_list(pTlsSession->pSslCtx, "HIGH:!aNULL:!MD5:!RC4"), STATUS_TLS_SSL_CTX_CREATION_FAILED);
 
     pTlsSession->pSsl = SSL_new(pTlsSession->pSslCtx);
-    CHK(pTlsSession->pSsl != NULL, STATUS_CREATE_SSL_FAILED);
+    CHK(pTlsSession->pSsl != NULL, STATUS_TLS_CREATE_SSL_FAILED);
 
     if (isServer) {
         SSL_set_accept_state(pTlsSession->pSsl);
@@ -93,8 +92,8 @@ STATUS tlsSessionStart(PTlsSession pTlsSession, BOOL isServer)
     }
 
     SSL_set_mode(pTlsSession->pSsl, SSL_MODE_AUTO_RETRY);
-    CHK((pReadBio = BIO_new(BIO_s_mem())) != NULL, STATUS_SSL_CTX_CREATION_FAILED);
-    CHK((pWriteBio = BIO_new(BIO_s_mem())) != NULL, STATUS_SSL_CTX_CREATION_FAILED);
+    CHK((pReadBio = BIO_new(BIO_s_mem())) != NULL, STATUS_TLS_SSL_CTX_CREATION_FAILED);
+    CHK((pWriteBio = BIO_new(BIO_s_mem())) != NULL, STATUS_TLS_SSL_CTX_CREATION_FAILED);
 
     BIO_set_mem_eof_return(pReadBio, -1);
     BIO_set_mem_eof_return(pWriteBio, -1);
@@ -137,14 +136,14 @@ STATUS tlsSessionProcessPacket(PTlsSession pTlsSession, PBYTE pData, UINT32 buff
     UINT32 writtenBytes = 0;
     UINT64 sslErrorRet;
 
-    CHK(pTlsSession != NULL && pData != NULL && pDataLen != NULL, STATUS_NULL_ARG);
-    CHK(pTlsSession->state != TLS_SESSION_STATE_NEW, STATUS_SOCKET_CONNECTION_NOT_READY_TO_SEND);
-    CHK(pTlsSession->state != TLS_SESSION_STATE_CLOSED, STATUS_SOCKET_CONNECTION_CLOSED_ALREADY);
+    CHK(pTlsSession != NULL && pData != NULL && pDataLen != NULL, STATUS_TLS_NULL_ARG);
+    CHK(pTlsSession->state != TLS_SESSION_STATE_NEW, STATUS_TLS_CONNECTION_NOT_READY_TO_SEND);
+    CHK(pTlsSession->state != TLS_SESSION_STATE_CLOSED, STATUS_SOCKET_CONN_CLOSED_ALREADY);
 
     // return early if there's no data
     CHK(*pDataLen != 0, retStatus);
 
-    CHK(BIO_write(SSL_get_rbio(pTlsSession->pSsl), pData, *pDataLen) > 0, STATUS_SECURE_SOCKET_READ_FAILED);
+    CHK(BIO_write(SSL_get_rbio(pTlsSession->pSsl), pData, *pDataLen) > 0, STATUS_TLS_SOCKET_READ_FAILED);
 
     // read as much as possible
     while (continueRead && writtenBytes < bufferLen) {
@@ -189,7 +188,7 @@ STATUS tlsSessionPutApplicationData(PTlsSession pTlsSession, PBYTE pData, UINT32
     SIZE_T wBioDataLen = 0;
     PCHAR wBioBuffer = NULL;
 
-    CHK(pTlsSession != NULL, STATUS_NULL_ARG);
+    CHK(pTlsSession != NULL, STATUS_TLS_NULL_ARG);
 
     if (SSL_is_init_finished(pTlsSession->pSsl)) {
         tlsSessionChangeState(pTlsSession, TLS_SESSION_STATE_CONNECTED);
@@ -208,12 +207,12 @@ STATUS tlsSessionPutApplicationData(PTlsSession pTlsSession, PBYTE pData, UINT32
                     break;
             }
 
-            CHK(FALSE, STATUS_SEND_DATA_FAILED);
+            CHK(FALSE, STATUS_NET_SEND_DATA_FAILED);
         }
     }
 
     wBioDataLen = (SIZE_T) BIO_get_mem_data(SSL_get_wbio(pTlsSession->pSsl), &wBioBuffer);
-    CHK_ERR(wBioDataLen >= 0, STATUS_SEND_DATA_FAILED, "BIO_get_mem_data failed");
+    CHK_ERR(wBioDataLen >= 0, STATUS_NET_SEND_DATA_FAILED, "BIO_get_mem_data failed");
 
     if (wBioDataLen > 0) {
         retStatus =
@@ -231,7 +230,7 @@ STATUS tlsSessionShutdown(PTlsSession pTlsSession)
 {
     STATUS retStatus = STATUS_SUCCESS;
 
-    CHK(pTlsSession != NULL, STATUS_NULL_ARG);
+    CHK(pTlsSession != NULL, STATUS_TLS_NULL_ARG);
     CHK(pTlsSession->state != TLS_SESSION_STATE_CLOSED, retStatus);
     CHK_STATUS(tlsSessionChangeState(pTlsSession, TLS_SESSION_STATE_CLOSED));
 

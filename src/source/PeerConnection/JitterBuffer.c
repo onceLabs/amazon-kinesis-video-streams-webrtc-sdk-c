@@ -1,6 +1,6 @@
 #define LOG_CLASS "JitterBuffer"
 
-#include "../Include_i.h"
+#include "JitterBuffer.h"
 
 // Applies only to the case where the very first frame has its first packets out of order
 #define MAX_OUT_OF_ORDER_PACKET_DIFFERENCE 512

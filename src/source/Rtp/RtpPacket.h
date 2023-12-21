@@ -10,6 +10,10 @@ RTP Packet include file
 extern "C" {
 #endif
 
+#include "kvs/error.h"
+#include "kvs/common_defs.h"
+#include "kvs/platform_utils.h"
+
 #define MIN_HEADER_LENGTH 12
 #define VERSION_SHIFT     6
 #define VERSION_MASK      0x3
@@ -34,6 +38,7 @@ extern "C" {
 
 #define GET_UINT16_SEQ_NUM(seqIndex) ((UINT16) ((seqIndex) % (MAX_UINT16 + 1)))
 
+#ifdef ENABLE_TWCC_FUNCTION
 /*
  *
      0                   1                   2                   3
@@ -48,6 +53,7 @@ extern "C" {
 #define TWCC_EXT_PROFILE                 0xBEDE
 #define TWCC_PAYLOAD(extId, sequenceNum) htonl((((extId) &0xfu) << 28u) | (1u << 24u) | ((UINT32) (sequenceNum) << 8u))
 #define TWCC_SEQNUM(extPayload)          ((UINT16) getUnalignedInt16BigEndian(extPayload + 1))
+#endif
 
 typedef STATUS (*DepayRtpPayloadFunc)(PBYTE, UINT32, PBYTE, PUINT32, PBOOL);
 

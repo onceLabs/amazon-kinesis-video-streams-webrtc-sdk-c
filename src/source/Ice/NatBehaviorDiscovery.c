@@ -1,5 +1,8 @@
 #define LOG_CLASS "NatTypeDiscovery"
 #include "../Include_i.h"
+#include "Network.h"
+#include "ConnectionListener.h"
+#include "NatBehaviorDiscovery.h"
 
 /* Store STUN reponse in bindingResponseList. */
 STATUS natTestIncomingDataHandler(UINT64 customData, PSocketConnection pSocketConnection, PBYTE pBuffer, UINT32 bufferLen, PKvsIpAddress pSrc,
@@ -381,4 +384,5 @@ PCHAR getNatBehaviorStr(NAT_BEHAVIOR natBehavior)
         case NAT_BEHAVIOR_PORT_DEPENDENT:
             return NAT_BEHAVIOR_PORT_DEPENDENT_STR;
     }
+    return NAT_BEHAVIOR_UNKNOWN;
 }

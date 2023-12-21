@@ -10,6 +10,11 @@ SessionDescription internal include file
 extern "C" {
 #endif
 
+#include "HashTable.h"
+#include "DoubleLinkedList.h"
+#include "Sdp.h"
+#include "PeerConnection.h"
+
 #define SESSION_DESCRIPTION_INIT_LINE_ENDING            "\\r\\n"
 #define SESSION_DESCRIPTION_INIT_LINE_ENDING_WITHOUT_CR "\\n"
 
@@ -73,9 +78,11 @@ extern "C" {
 #define OPUS_CLOCKRATE  (UINT64) 48000
 #define PCM_CLOCKRATE   (UINT64) 8000
 
+#ifndef ENABLE_TWCC_FUNCTION
 // https://tools.ietf.org/html/draft-holmer-rmcat-transport-wide-cc-extensions-01
 #define TWCC_SDP_ATTR "transport-cc"
 #define TWCC_EXT_URL  "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+#endif
 
 STATUS setPayloadTypesFromOffer(PHashTable, PHashTable, PSessionDescription);
 STATUS setPayloadTypesForOffer(PHashTable);

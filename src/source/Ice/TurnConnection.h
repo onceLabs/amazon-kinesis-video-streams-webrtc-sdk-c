@@ -9,6 +9,12 @@ TurnConnection internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "Stun.h"
+#include "Network.h"
+#include "TimerQueue.h"
+#include "SocketConnection.h"
+#include "ConnectionListener.h"
+#include "IceUtils.h"
 
 // https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
 #define TURN_REQUEST_TRANSPORT_UDP               17
@@ -22,10 +28,10 @@ extern "C" {
 
 // turn state timeouts
 #define DEFAULT_TURN_SOCKET_CONNECT_TIMEOUT    (5 * HUNDREDS_OF_NANOS_IN_A_SECOND)
-#define DEFAULT_TURN_GET_CREDENTIAL_TIMEOUT    (5 * HUNDREDS_OF_NANOS_IN_A_SECOND)
-#define DEFAULT_TURN_ALLOCATION_TIMEOUT        (5 * HUNDREDS_OF_NANOS_IN_A_SECOND)
-#define DEFAULT_TURN_CREATE_PERMISSION_TIMEOUT (2 * HUNDREDS_OF_NANOS_IN_A_SECOND)
-#define DEFAULT_TURN_BIND_CHANNEL_TIMEOUT      (3 * HUNDREDS_OF_NANOS_IN_A_SECOND)
+#define DEFAULT_TURN_GET_CREDENTIAL_TIMEOUT    (10 * HUNDREDS_OF_NANOS_IN_A_SECOND)
+#define DEFAULT_TURN_ALLOCATION_TIMEOUT        (10 * HUNDREDS_OF_NANOS_IN_A_SECOND) //!< 5 sec
+#define DEFAULT_TURN_CREATE_PERMISSION_TIMEOUT (10 * HUNDREDS_OF_NANOS_IN_A_SECOND) //!< 2 sec
+#define DEFAULT_TURN_BIND_CHANNEL_TIMEOUT      (10 * HUNDREDS_OF_NANOS_IN_A_SECOND) //!< 3 sec
 #define DEFAULT_TURN_CLEAN_UP_TIMEOUT          (10 * HUNDREDS_OF_NANOS_IN_A_SECOND)
 
 #define DEFAULT_TURN_ALLOCATION_REFRESH_GRACE_PERIOD (30 * HUNDREDS_OF_NANOS_IN_A_SECOND)

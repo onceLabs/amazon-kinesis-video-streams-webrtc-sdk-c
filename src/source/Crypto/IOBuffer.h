@@ -6,6 +6,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "kvs/error.h"
+#include "kvs/common_defs.h"
+#include "kvs/platform_utils.h"
 
 typedef struct __IOBuffer IOBuffer, *PIOBuffer;
 struct __IOBuffer {

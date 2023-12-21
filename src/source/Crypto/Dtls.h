@@ -10,6 +10,17 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "TimerQueue.h"
+#include "Crypto.h"
+#include "Network.h"
+#include "IOBuffer.h"
+
+#ifdef KVS_USE_OPENSSL
+// TBD
+#elif KVS_USE_MBEDTLS
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
+#endif
 
 #define MAX_SRTP_MASTER_KEY_LEN   16
 #define MAX_SRTP_SALT_KEY_LEN     14
@@ -196,9 +207,15 @@ INT32 dtlsSessionSendCallback(PVOID, const unsigned char*, ULONG);
 INT32 dtlsSessionReceiveCallback(PVOID, unsigned char*, ULONG);
 VOID dtlsSessionSetTimerCallback(PVOID, UINT32, UINT32);
 INT32 dtlsSessionGetTimerCallback(PVOID);
+#if (MBEDTLS_VERSION_NUMBER==0x03000000 || MBEDTLS_VERSION_NUMBER==0x03020100)
+INT32 dtlsSessionKeyDerivationCallback(PVOID, mbedtls_ssl_key_export_type, const unsigned char*, size_t,
+                                       const unsigned char[MAX_DTLS_RANDOM_BYTES_LEN],
+                                       const unsigned char[MAX_DTLS_RANDOM_BYTES_LEN], mbedtls_tls_prf_types);
+#else
 INT32 dtlsSessionKeyDerivationCallback(PVOID, const unsigned char*, const unsigned char*, ULONG, ULONG, ULONG,
                                        const unsigned char[MAX_DTLS_RANDOM_BYTES_LEN], const unsigned char[MAX_DTLS_RANDOM_BYTES_LEN],
                                        mbedtls_tls_prf_types);
+#endif
 #else
 #error "A Crypto implementation is required."
 #endif

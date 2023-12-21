@@ -1,5 +1,6 @@
 #define LOG_CLASS "Crypto"
-#include "../Include_i.h"
+#include <mbedtls/x509_crt.h>
+#include "Dtls.h"
 
 STATUS createRtcCertificate(PRtcCertificate* ppRtcCertificate)
 {

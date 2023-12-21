@@ -6,6 +6,14 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "IOBuffer.h"
+#ifdef KVS_USE_OPENSSL
+// #TBD
+#elif KVS_USE_MBEDTLS
+#include <mbedtls/ssl.h>
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
+#endif
 
 typedef enum {
     TLS_SESSION_STATE_NEW,        /* Tls is just created, but the handshake process has not started */

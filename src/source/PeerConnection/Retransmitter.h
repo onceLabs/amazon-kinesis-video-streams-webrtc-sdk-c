@@ -9,6 +9,9 @@ Retransmitter internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "RtcpPacket.h"
+#include "PeerConnection.h"
+#include "Retransmitter.h"
 
 typedef struct {
     PUINT16 sequenceNumberList;

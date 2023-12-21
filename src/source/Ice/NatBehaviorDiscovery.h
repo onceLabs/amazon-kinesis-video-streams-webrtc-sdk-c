@@ -6,6 +6,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "Stun.h"
+#include "Network.h"
+#include "SocketConnection.h"
+#include "IceUtils.h"
 
 #define DEFAULT_NAT_TEST_MAX_BINDING_REQUEST_COUNT 5
 #define DEFAULT_TEST_NAT_TEST_RESPONSE_WAIT_TIME   500 * HUNDREDS_OF_NANOS_IN_A_MILLISECOND
@@ -17,6 +21,7 @@ extern "C" {
 #define NAT_BEHAVIOR_ENDPOINT_INDEPENDENT_STR (PCHAR) "ENDPOINT_INDEPENDENT"
 #define NAT_BEHAVIOR_ADDRESS_DEPENDENT_STR    (PCHAR) "ADDRESS_DEPENDENT"
 #define NAT_BEHAVIOR_PORT_DEPENDENT_STR       (PCHAR) "PORT_DEPENDENT"
+#define NAT_BEHAVIOR_UNKNOWN                  (PCHAR) "UNKNOWN"
 
 typedef struct {
     /* Should be able to contain max number of binding response we can get */

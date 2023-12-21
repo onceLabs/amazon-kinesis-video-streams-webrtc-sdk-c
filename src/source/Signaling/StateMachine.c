@@ -2,226 +2,51 @@
  * Implementation of a signaling states machine callbacks
  */
 #define LOG_CLASS "SignalingState"
-#include "../Include_i.h"
+#include "StateMachine.h"
+#include "state_machine.h"
 
 /**
  * Static definitions of the states
  */
 StateMachineState SIGNALING_STATE_MACHINE_STATES[] = {
     {SIGNALING_STATE_NEW, SIGNALING_STATE_NONE | SIGNALING_STATE_NEW, fromNewSignalingState, executeNewSignalingState,
-     defaultSignalingStateTransitionHook, INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_INVALID_READY_STATE},
+     INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_INVALID_READY_STATE},
     {SIGNALING_STATE_GET_TOKEN,
      SIGNALING_STATE_NEW | SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_CREATE | SIGNALING_STATE_GET_ENDPOINT | SIGNALING_STATE_GET_ICE_CONFIG |
-         SIGNALING_STATE_READY | SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_DELETE | SIGNALING_STATE_GET_TOKEN,
-     fromGetTokenSignalingState, executeGetTokenSignalingState, defaultSignalingStateTransitionHook, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
+         SIGNALING_STATE_READY | SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_GET_TOKEN,
+     fromGetTokenSignalingState, executeGetTokenSignalingState, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
      STATUS_SIGNALING_GET_TOKEN_CALL_FAILED},
     {SIGNALING_STATE_DESCRIBE,
      SIGNALING_STATE_GET_TOKEN | SIGNALING_STATE_CREATE | SIGNALING_STATE_GET_ENDPOINT | SIGNALING_STATE_GET_ICE_CONFIG | SIGNALING_STATE_CONNECT |
-         SIGNALING_STATE_CONNECTED | SIGNALING_STATE_DELETE | SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_READY | SIGNALING_STATE_DISCONNECTED,
-     fromDescribeSignalingState, executeDescribeSignalingState, defaultSignalingStateTransitionHook, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
+         SIGNALING_STATE_CONNECTED | SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_READY | SIGNALING_STATE_DISCONNECTED,
+     fromDescribeSignalingState, executeDescribeSignalingState, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
      STATUS_SIGNALING_DESCRIBE_CALL_FAILED},
     {SIGNALING_STATE_CREATE, SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_CREATE, fromCreateSignalingState, executeCreateSignalingState,
-     defaultSignalingStateTransitionHook, SIGNALING_STATES_DEFAULT_RETRY_COUNT, STATUS_SIGNALING_CREATE_CALL_FAILED},
+     SIGNALING_STATES_DEFAULT_RETRY_COUNT, STATUS_SIGNALING_CREATE_CALL_FAILED},
     {SIGNALING_STATE_GET_ENDPOINT,
      SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_CREATE | SIGNALING_STATE_GET_TOKEN | SIGNALING_STATE_READY | SIGNALING_STATE_CONNECT |
          SIGNALING_STATE_CONNECTED | SIGNALING_STATE_GET_ENDPOINT,
-     fromGetEndpointSignalingState, executeGetEndpointSignalingState, defaultSignalingStateTransitionHook, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
+     fromGetEndpointSignalingState, executeGetEndpointSignalingState, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
      STATUS_SIGNALING_GET_ENDPOINT_CALL_FAILED},
     {SIGNALING_STATE_GET_ICE_CONFIG,
      SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_GET_ENDPOINT | SIGNALING_STATE_READY |
          SIGNALING_STATE_GET_ICE_CONFIG,
-     fromGetIceConfigSignalingState, executeGetIceConfigSignalingState, defaultSignalingStateTransitionHook, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
+     fromGetIceConfigSignalingState, executeGetIceConfigSignalingState, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
      STATUS_SIGNALING_GET_ICE_CONFIG_CALL_FAILED},
     {SIGNALING_STATE_READY, SIGNALING_STATE_GET_ICE_CONFIG | SIGNALING_STATE_DISCONNECTED | SIGNALING_STATE_READY, fromReadySignalingState,
-     executeReadySignalingState, defaultSignalingStateTransitionHook, INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_READY_CALLBACK_FAILED},
+     executeReadySignalingState, INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_READY_CALLBACK_FAILED},
     {SIGNALING_STATE_CONNECT, SIGNALING_STATE_READY | SIGNALING_STATE_DISCONNECTED | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_CONNECT,
-     fromConnectSignalingState, executeConnectSignalingState, defaultSignalingStateTransitionHook, INFINITE_RETRY_COUNT_SENTINEL,
+     fromConnectSignalingState, executeConnectSignalingState, INFINITE_RETRY_COUNT_SENTINEL,
      STATUS_SIGNALING_CONNECT_CALL_FAILED},
     {SIGNALING_STATE_CONNECTED, SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED, fromConnectedSignalingState, executeConnectedSignalingState,
-     defaultSignalingStateTransitionHook, INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_CONNECTED_CALLBACK_FAILED},
+     INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_CONNECTED_CALLBACK_FAILED},
     {SIGNALING_STATE_DISCONNECTED, SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED, fromDisconnectedSignalingState,
-     executeDisconnectedSignalingState, defaultSignalingStateTransitionHook, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
-     STATUS_SIGNALING_DISCONNECTED_CALLBACK_FAILED},
-    {SIGNALING_STATE_DELETE,
-     SIGNALING_STATE_GET_TOKEN | SIGNALING_STATE_DESCRIBE | SIGNALING_STATE_CREATE | SIGNALING_STATE_GET_ENDPOINT | SIGNALING_STATE_GET_ICE_CONFIG |
-         SIGNALING_STATE_READY | SIGNALING_STATE_CONNECT | SIGNALING_STATE_CONNECTED | SIGNALING_STATE_DISCONNECTED | SIGNALING_STATE_DELETE,
-     fromDeleteSignalingState, executeDeleteSignalingState, defaultSignalingStateTransitionHook, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
-     STATUS_SIGNALING_DELETE_CALL_FAILED},
-    {SIGNALING_STATE_DELETED, SIGNALING_STATE_DELETE | SIGNALING_STATE_DELETED, fromDeletedSignalingState, executeDeletedSignalingState,
-     defaultSignalingStateTransitionHook, INFINITE_RETRY_COUNT_SENTINEL, STATUS_SIGNALING_DELETE_CALL_FAILED},
+     executeDisconnectedSignalingState, SIGNALING_STATES_DEFAULT_RETRY_COUNT,
+     STATUS_SIGNALING_DISCONNECTED_CALLBACK_FAILED}
 };
 
 UINT32 SIGNALING_STATE_MACHINE_STATE_COUNT = ARRAY_SIZE(SIGNALING_STATE_MACHINE_STATES);
 
-STATUS defaultSignalingStateTransitionHook(UINT64 customData /* customData should be PSignalingClient */, PUINT64 stateTransitionWaitTime)
-{
-    ENTERS();
-    STATUS retStatus = STATUS_SUCCESS;
-    STATUS countStatus = STATUS_SUCCESS;
-    PSignalingClient pSignalingClient = NULL;
-    PKvsRetryStrategy pSignalingStateMachineRetryStrategy = NULL;
-    PKvsRetryStrategyCallbacks pSignalingStateMachineRetryStrategyCallbacks = NULL;
-    UINT64 retryWaitTime = 0;
-
-    pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    CHK(pSignalingClient != NULL && stateTransitionWaitTime != NULL, STATUS_NULL_ARG);
-
-    pSignalingStateMachineRetryStrategy = &(pSignalingClient->clientInfo.signalingStateMachineRetryStrategy);
-    pSignalingStateMachineRetryStrategyCallbacks = &(pSignalingClient->clientInfo.signalingStateMachineRetryStrategyCallbacks);
-
-    // result > SERVICE_CALL_RESULT_OK covers case for -
-    // result != SERVICE_CALL_RESULT_NOT_SET and != SERVICE_CALL_RESULT_OK
-    // If we support any other 2xx service call results, the condition
-    // should change to (pSignalingClient->result > 299 && ..)
-    CHK(pSignalingClient->result > SERVICE_CALL_RESULT_OK && pSignalingStateMachineRetryStrategyCallbacks->executeRetryStrategyFn != NULL,
-        STATUS_SUCCESS);
-
-    // A retry is considered only after executeRetry is executed. This will avoid publishing count + 1
-    if (pSignalingStateMachineRetryStrategyCallbacks->getCurrentRetryAttemptNumberFn != NULL) {
-        if ((countStatus = pSignalingStateMachineRetryStrategyCallbacks->getCurrentRetryAttemptNumberFn(
-                 pSignalingStateMachineRetryStrategy, &pSignalingClient->diagnostics.stateMachineRetryCount)) != STATUS_SUCCESS) {
-            DLOGW("Failed to get retry count. Error code: %08x", countStatus);
-        } else {
-            DLOGD("Retry count: %llu", pSignalingClient->diagnostics.stateMachineRetryCount);
-        }
-    }
-    DLOGV("Signaling Client base result is [%u]. Executing KVS retry handler of retry strategy type [%u]", pSignalingClient->result,
-          pSignalingStateMachineRetryStrategy->retryStrategyType);
-    pSignalingStateMachineRetryStrategyCallbacks->executeRetryStrategyFn(pSignalingStateMachineRetryStrategy, &retryWaitTime);
-    *stateTransitionWaitTime = retryWaitTime;
-
-CleanUp:
-
-    LEAVES();
-    return retStatus;
-}
-
-STATUS signalingStateMachineIterator(PSignalingClient pSignalingClient, UINT64 expiration, UINT64 finalState)
-{
-    ENTERS();
-    UINT64 currentTime;
-    UINT32 i;
-    STATUS retStatus = STATUS_SUCCESS;
-    PStateMachineState pState = NULL;
-    BOOL locked = FALSE;
-
-    MUTEX_LOCK(pSignalingClient->stateLock);
-    locked = TRUE;
-
-    while (TRUE) {
-        CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
-
-        CHK(!ATOMIC_LOAD_BOOL(&pSignalingClient->shutdown), retStatus);
-
-        if (STATUS_FAILED(retStatus)) {
-            CHK(pSignalingClient->pChannelInfo->retry, retStatus);
-            for (i = 0; i < SIGNALING_STATE_MACHINE_STATE_COUNT; i++) {
-                CHK(retStatus != SIGNALING_STATE_MACHINE_STATES[i].status, SIGNALING_STATE_MACHINE_STATES[i].status);
-            }
-        }
-
-        currentTime = SIGNALING_GET_CURRENT_TIME(pSignalingClient);
-
-        CHK(expiration == 0 || currentTime <= expiration, STATUS_OPERATION_TIMED_OUT);
-
-        // Fix-up the expired credentials transition
-        // NOTE: Api Gateway might not return an error that can be interpreted as unauthorized to
-        // make the correct transition to auth integration state.
-        if (retStatus == STATUS_SERVICE_CALL_NOT_AUTHORIZED_ERROR ||
-            (pSignalingClient->pAwsCredentials != NULL && pSignalingClient->pAwsCredentials->expiration < currentTime)) {
-            // Set the call status as auth error
-            ATOMIC_STORE(&pSignalingClient->result, (SIZE_T) SERVICE_CALL_NOT_AUTHORIZED);
-        }
-
-        retStatus = stepStateMachine(pSignalingClient->pStateMachine);
-
-        CHK_STATUS(getStateMachineCurrentState(pSignalingClient->pStateMachine, &pState));
-        CHK(!(pState->state == finalState), STATUS_SUCCESS);
-    }
-
-CleanUp:
-
-    if (locked) {
-        MUTEX_UNLOCK(pSignalingClient->stateLock);
-    }
-
-    LEAVES();
-    return retStatus;
-}
-
-SIGNALING_CLIENT_STATE getSignalingStateFromStateMachineState(UINT64 state)
-{
-    SIGNALING_CLIENT_STATE clientState;
-    switch (state) {
-        case SIGNALING_STATE_NONE:
-            clientState = SIGNALING_CLIENT_STATE_UNKNOWN;
-            break;
-        case SIGNALING_STATE_NEW:
-            clientState = SIGNALING_CLIENT_STATE_NEW;
-            break;
-        case SIGNALING_STATE_GET_TOKEN:
-            clientState = SIGNALING_CLIENT_STATE_GET_CREDENTIALS;
-            break;
-        case SIGNALING_STATE_DESCRIBE:
-            clientState = SIGNALING_CLIENT_STATE_DESCRIBE;
-            break;
-        case SIGNALING_STATE_CREATE:
-            clientState = SIGNALING_CLIENT_STATE_CREATE;
-            break;
-        case SIGNALING_STATE_GET_ENDPOINT:
-            clientState = SIGNALING_CLIENT_STATE_GET_ENDPOINT;
-            break;
-        case SIGNALING_STATE_GET_ICE_CONFIG:
-            clientState = SIGNALING_CLIENT_STATE_GET_ICE_CONFIG;
-            break;
-        case SIGNALING_STATE_READY:
-            clientState = SIGNALING_CLIENT_STATE_READY;
-            break;
-        case SIGNALING_STATE_CONNECT:
-            clientState = SIGNALING_CLIENT_STATE_CONNECTING;
-            break;
-        case SIGNALING_STATE_CONNECTED:
-            clientState = SIGNALING_CLIENT_STATE_CONNECTED;
-            break;
-        case SIGNALING_STATE_DISCONNECTED:
-            clientState = SIGNALING_CLIENT_STATE_DISCONNECTED;
-            break;
-        case SIGNALING_STATE_DELETE:
-            clientState = SIGNALING_CLIENT_STATE_DELETE;
-            break;
-        case SIGNALING_STATE_DELETED:
-            clientState = SIGNALING_CLIENT_STATE_DELETED;
-            break;
-        default:
-            clientState = SIGNALING_CLIENT_STATE_UNKNOWN;
-    }
-
-    return clientState;
-}
-
-STATUS acceptSignalingStateMachineState(PSignalingClient pSignalingClient, UINT64 state)
-{
-    ENTERS();
-    STATUS retStatus = STATUS_SUCCESS;
-    BOOL locked = FALSE;
-
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
-
-    MUTEX_LOCK(pSignalingClient->stateLock);
-    locked = TRUE;
-
-    // Step the state machine
-    CHK_STATUS(acceptStateMachineState(pSignalingClient->pStateMachine, state));
-
-CleanUp:
-
-    if (locked) {
-        MUTEX_UNLOCK(pSignalingClient->stateLock);
-    }
-
-    LEAVES();
-    return retStatus;
-}
 
 ///////////////////////////////////////////////////////////////////////////
 // State machine callback functions
@@ -233,7 +58,7 @@ STATUS fromNewSignalingState(UINT64 customData, PUINT64 pState)
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
     UINT64 state;
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
     // Transition to auth state
     state = SIGNALING_STATE_GET_TOKEN;
@@ -252,9 +77,7 @@ STATUS executeNewSignalingState(UINT64 customData, UINT64 time)
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
-    ATOMIC_STORE(&pSignalingClient->result, (SIZE_T) SERVICE_CALL_RESULT_NOT_SET);
-    ATOMIC_STORE_BOOL(&pSignalingClient->clientReady, FALSE);
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
     // Notify of the state change
     if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
@@ -275,13 +98,12 @@ STATUS fromGetTokenSignalingState(UINT64 customData, PUINT64 pState)
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
     UINT64 state = SIGNALING_STATE_GET_TOKEN;
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    if ((SERVICE_CALL_RESULT) ATOMIC_LOAD(&pSignalingClient->result) == SERVICE_CALL_RESULT_OK) {
-        // Check if we are trying to delete a channel
-        if (ATOMIC_LOAD_BOOL(&pSignalingClient->deleting)) {
-            state = SIGNALING_STATE_DELETE;
-        } else if (pSignalingClient->pChannelInfo->pChannelArn != NULL && pSignalingClient->pChannelInfo->pChannelArn[0] != '\0') {
+    // get the iot credential successfully.
+    if ((HTTP_STATUS_CODE) ATOMIC_LOAD(&pSignalingClient->apiCallStatus) == HTTP_STATUS_OK) {
+        // do we have the channel endpoint.
+        if (pSignalingClient->pChannelInfo->pChannelArn != NULL && pSignalingClient->pChannelInfo->pChannelArn[0] != '\0') {
             // If the client application has specified the Channel ARN then we will skip describe and create states
             // Store the ARN in the stream description object first
             STRNCPY(pSignalingClient->channelDescription.channelArn, pSignalingClient->pChannelInfo->pChannelArn, MAX_ARN_LEN);
@@ -308,13 +130,11 @@ STATUS executeGetTokenSignalingState(UINT64 customData, UINT64 time)
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    SERVICE_CALL_RESULT serviceCallResult;
-    UINT64 startTimeInMacro = 0;
+    HTTP_STATUS_CODE serviceCallResult;
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    ATOMIC_STORE(&pSignalingClient->result, (SIZE_T) SERVICE_CALL_RESULT_NOT_SET);
-    ATOMIC_STORE_BOOL(&pSignalingClient->clientReady, FALSE);
+    ATOMIC_STORE(&pSignalingClient->apiCallStatus, (SIZE_T) HTTP_STATUS_NONE);
 
     // Notify of the state change
     if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
@@ -325,18 +145,16 @@ STATUS executeGetTokenSignalingState(UINT64 customData, UINT64 time)
     THREAD_SLEEP_UNTIL(time);
 
     // Use the credential provider to get the token
-    PROFILE_CALL_WITH_T_OBJ(retStatus = pSignalingClient->pCredentialProvider->getCredentialsFn(pSignalingClient->pCredentialProvider,
-                                                                                                &pSignalingClient->pAwsCredentials),
-                            pSignalingClient->diagnostics.getTokenCallTime, "Get token call");
+    retStatus = pSignalingClient->pCredentialProvider->getCredentialsFn(pSignalingClient->pCredentialProvider, &pSignalingClient->pAwsCredentials);
 
     // Check the expiration
-    if (NULL == pSignalingClient->pAwsCredentials || SIGNALING_GET_CURRENT_TIME(pSignalingClient) >= pSignalingClient->pAwsCredentials->expiration) {
-        serviceCallResult = SERVICE_CALL_NOT_AUTHORIZED;
+    if (NULL == pSignalingClient->pAwsCredentials || GETTIME() >= pSignalingClient->pAwsCredentials->expiration) {
+        serviceCallResult = HTTP_STATUS_UNAUTHORIZED;
     } else {
-        serviceCallResult = SERVICE_CALL_RESULT_OK;
+        serviceCallResult = HTTP_STATUS_OK;
     }
 
-    ATOMIC_STORE(&pSignalingClient->result, (SIZE_T) serviceCallResult);
+    ATOMIC_STORE(&pSignalingClient->apiCallStatus, (SIZE_T) serviceCallResult);
 
 CleanUp:
 
@@ -352,26 +170,21 @@ STATUS fromDescribeSignalingState(UINT64 customData, PUINT64 pState)
     UINT64 state = SIGNALING_STATE_DESCRIBE;
     SIZE_T result;
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    result = ATOMIC_LOAD(&pSignalingClient->result);
+    result = ATOMIC_LOAD(&pSignalingClient->apiCallStatus);
     switch (result) {
-        case SERVICE_CALL_RESULT_OK:
+        case HTTP_STATUS_OK:
             // If we are trying to delete the channel then move to delete state
-            if (ATOMIC_LOAD_BOOL(&pSignalingClient->deleting)) {
-                state = SIGNALING_STATE_DELETE;
-            } else {
-                state = SIGNALING_STATE_GET_ENDPOINT;
-            }
-
+            state = SIGNALING_STATE_GET_ENDPOINT;
             break;
 
-        case SERVICE_CALL_RESOURCE_NOT_FOUND:
+        case HTTP_STATUS_NOT_FOUND:
             state = SIGNALING_STATE_CREATE;
             break;
 
-        case SERVICE_CALL_FORBIDDEN:
-        case SERVICE_CALL_NOT_AUTHORIZED:
+        case HTTP_STATUS_FORBIDDEN:
+        case HTTP_STATUS_UNAUTHORIZED:
             state = SIGNALING_STATE_GET_TOKEN;
             break;
 
@@ -392,12 +205,8 @@ STATUS executeDescribeSignalingState(UINT64 customData, UINT64 time)
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    UINT64 startTimeInMacro = 0;
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
-    ATOMIC_STORE(&pSignalingClient->result, (SIZE_T) SERVICE_CALL_RESULT_NOT_SET);
-    ATOMIC_STORE_BOOL(&pSignalingClient->clientReady, FALSE);
-
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
     // Notify of the state change
     if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
         CHK_STATUS(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
@@ -405,8 +214,7 @@ STATUS executeDescribeSignalingState(UINT64 customData, UINT64 time)
     }
 
     // Call the aggregate function
-    PROFILE_CALL_WITH_T_OBJ(retStatus = describeChannel(pSignalingClient, time), pSignalingClient->diagnostics.describeCallTime,
-                            "Describe signaling call");
+    retStatus = describeChannel(pSignalingClient, time);
 
 CleanUp:
 
@@ -422,16 +230,16 @@ STATUS fromCreateSignalingState(UINT64 customData, PUINT64 pState)
     UINT64 state = SIGNALING_STATE_CREATE;
     SIZE_T result;
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    result = ATOMIC_LOAD(&pSignalingClient->result);
+    result = ATOMIC_LOAD(&pSignalingClient->apiCallStatus);
     switch (result) {
-        case SERVICE_CALL_RESULT_OK:
+        case HTTP_STATUS_OK:
             state = SIGNALING_STATE_DESCRIBE;
             break;
 
-        case SERVICE_CALL_FORBIDDEN:
-        case SERVICE_CALL_NOT_AUTHORIZED:
+        case HTTP_STATUS_FORBIDDEN:
+        case HTTP_STATUS_UNAUTHORIZED:
             state = SIGNALING_STATE_GET_TOKEN;
             break;
 
@@ -452,20 +260,17 @@ STATUS executeCreateSignalingState(UINT64 customData, UINT64 time)
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    UINT64 startTimeInMacro = 0;
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
-    ATOMIC_STORE(&pSignalingClient->result, (SIZE_T) SERVICE_CALL_RESULT_NOT_SET);
-    ATOMIC_STORE_BOOL(&pSignalingClient->clientReady, FALSE);
-
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
     // Notify of the state change
     if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
-        CHK_STATUS(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
-                                                                            SIGNALING_CLIENT_STATE_CREATE));
+        CHK(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
+                                                                     SIGNALING_CLIENT_STATE_CREATE) == STATUS_SUCCESS,
+            STATUS_SIGNALING_FSM_STATE_CHANGE_FAILED);
     }
 
     // Call the aggregate function
-    PROFILE_CALL_WITH_T_OBJ(retStatus = createChannel(pSignalingClient, time), pSignalingClient->diagnostics.createCallTime, "Create signaling call");
+    retStatus = createChannel(pSignalingClient, time);
 
 CleanUp:
 
@@ -481,16 +286,16 @@ STATUS fromGetEndpointSignalingState(UINT64 customData, PUINT64 pState)
     UINT64 state = SIGNALING_STATE_GET_ENDPOINT;
     SIZE_T result;
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    result = ATOMIC_LOAD(&pSignalingClient->result);
+    result = ATOMIC_LOAD(&pSignalingClient->apiCallStatus);
     switch (result) {
-        case SERVICE_CALL_RESULT_OK:
+        case HTTP_STATUS_OK:
             state = SIGNALING_STATE_GET_ICE_CONFIG;
             break;
 
-        case SERVICE_CALL_FORBIDDEN:
-        case SERVICE_CALL_NOT_AUTHORIZED:
+        case HTTP_STATUS_FORBIDDEN:
+        case HTTP_STATUS_UNAUTHORIZED:
             state = SIGNALING_STATE_GET_TOKEN;
             break;
 
@@ -510,21 +315,17 @@ STATUS executeGetEndpointSignalingState(UINT64 customData, UINT64 time)
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    UINT64 startTimeInMacro = 0;
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
-    ATOMIC_STORE(&pSignalingClient->result, (SIZE_T) SERVICE_CALL_RESULT_NOT_SET);
-    ATOMIC_STORE_BOOL(&pSignalingClient->clientReady, FALSE);
-
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
     // Notify of the state change
     if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
-        CHK_STATUS(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
-                                                                            SIGNALING_CLIENT_STATE_GET_ENDPOINT));
+        CHK(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
+                                                                     SIGNALING_CLIENT_STATE_GET_ENDPOINT) == STATUS_SUCCESS,
+            STATUS_SIGNALING_FSM_STATE_CHANGE_FAILED);
     }
 
     // Call the aggregate function
-    PROFILE_CALL_WITH_T_OBJ(retStatus = getChannelEndpoint(pSignalingClient, time), pSignalingClient->diagnostics.getEndpointCallTime,
-                            "Get endpoint signaling call");
+    retStatus = getChannelEndpoint(pSignalingClient, time);
 
 CleanUp:
 
@@ -540,16 +341,16 @@ STATUS fromGetIceConfigSignalingState(UINT64 customData, PUINT64 pState)
     UINT64 state = SIGNALING_STATE_GET_ICE_CONFIG;
     SIZE_T result;
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    result = ATOMIC_LOAD(&pSignalingClient->result);
+    result = ATOMIC_LOAD(&pSignalingClient->apiCallStatus);
     switch (result) {
-        case SERVICE_CALL_RESULT_OK:
+        case HTTP_STATUS_OK:
             state = SIGNALING_STATE_READY;
             break;
 
-        case SERVICE_CALL_FORBIDDEN:
-        case SERVICE_CALL_NOT_AUTHORIZED:
+        case HTTP_STATUS_FORBIDDEN:
+        case HTTP_STATUS_UNAUTHORIZED:
             state = SIGNALING_STATE_GET_TOKEN;
             break;
 
@@ -570,21 +371,18 @@ STATUS executeGetIceConfigSignalingState(UINT64 customData, UINT64 time)
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    UINT64 startTimeInMacro = 0;
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
-    ATOMIC_STORE(&pSignalingClient->result, (SIZE_T) SERVICE_CALL_RESULT_NOT_SET);
-    ATOMIC_STORE_BOOL(&pSignalingClient->clientReady, FALSE);
-
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
     // Notify of the state change
     if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
-        CHK_STATUS(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
-                                                                            SIGNALING_CLIENT_STATE_GET_ICE_CONFIG));
+        CHK(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
+                                                                     SIGNALING_CLIENT_STATE_GET_ICE_CONFIG) == STATUS_SUCCESS,
+            STATUS_SIGNALING_FSM_STATE_CHANGE_FAILED);
     }
 
     // Call the aggregate function
-    PROFILE_CALL_WITH_T_OBJ(retStatus = getIceConfig(pSignalingClient, time), pSignalingClient->diagnostics.getIceConfigCallTime,
-                            "Get ICE config signaling call");
+    retStatus = getIceConfig(pSignalingClient, time);
+
 CleanUp:
 
     LEAVES();
@@ -596,24 +394,23 @@ STATUS fromReadySignalingState(UINT64 customData, PUINT64 pState)
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    UINT64 state = SIGNALING_STATE_CONNECT;
+    UINT64 state = SIGNALING_STATE_READY;
 
     SIZE_T result;
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
-
-    result = ATOMIC_LOAD(&pSignalingClient->result);
+    result = ATOMIC_LOAD(&pSignalingClient->apiCallStatus);
     switch (result) {
-        case SERVICE_CALL_RESULT_OK:
-            state = SIGNALING_STATE_READY;
+        case HTTP_STATUS_OK:
+            state = SIGNALING_STATE_CONNECT;
             break;
 
-        case SERVICE_CALL_RESULT_SIGNALING_RECONNECT_ICE:
+        case HTTP_STATUS_SIGNALING_RECONNECT_ICE:
             state = SIGNALING_STATE_GET_ICE_CONFIG;
             break;
 
-        case SERVICE_CALL_FORBIDDEN:
-        case SERVICE_CALL_NOT_AUTHORIZED:
+        case HTTP_STATUS_FORBIDDEN:
+        case HTTP_STATUS_UNAUTHORIZED:
             state = SIGNALING_STATE_GET_TOKEN;
             break;
 
@@ -639,14 +436,13 @@ STATUS executeReadySignalingState(UINT64 customData, UINT64 time)
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
-    ATOMIC_STORE_BOOL(&pSignalingClient->clientReady, TRUE);
-    ATOMIC_STORE(&pSignalingClient->result, (SIZE_T) SERVICE_CALL_RESULT_NOT_SET);
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
     // Notify of the state change
     if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
-        CHK_STATUS(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
-                                                                            SIGNALING_CLIENT_STATE_READY));
+        CHK(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
+                                                                     SIGNALING_CLIENT_STATE_READY) == STATUS_SUCCESS,
+            STATUS_SIGNALING_FSM_STATE_CHANGE_FAILED);
     }
 
 CleanUp:
@@ -664,12 +460,12 @@ STATUS fromConnectSignalingState(UINT64 customData, PUINT64 pState)
     SIZE_T result;
     BOOL connected;
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    result = ATOMIC_LOAD(&pSignalingClient->result);
+    result = ATOMIC_LOAD(&pSignalingClient->apiCallStatus);
     connected = ATOMIC_LOAD_BOOL(&pSignalingClient->connected);
     switch (result) {
-        case SERVICE_CALL_RESULT_OK:
+        case HTTP_STATUS_OK:
             // We also need to check whether we terminated OK and connected or
             // simply terminated without being connected
             if (connected) {
@@ -678,31 +474,28 @@ STATUS fromConnectSignalingState(UINT64 customData, PUINT64 pState)
 
             break;
 
-        case SERVICE_CALL_RESOURCE_NOT_FOUND:
+        case HTTP_STATUS_NOT_FOUND:
             state = SIGNALING_STATE_DESCRIBE;
             break;
 
-        case SERVICE_CALL_FORBIDDEN:
-        case SERVICE_CALL_NOT_AUTHORIZED:
+        case HTTP_STATUS_FORBIDDEN:
+        case HTTP_STATUS_UNAUTHORIZED:
             state = SIGNALING_STATE_GET_TOKEN;
             break;
 
-        case SERVICE_CALL_INTERNAL_ERROR:
+        case HTTP_STATUS_INTERNAL_SERVER_ERROR:
+        case HTTP_STATUS_BAD_REQUEST:
             state = SIGNALING_STATE_GET_ENDPOINT;
             break;
 
-        case SERVICE_CALL_BAD_REQUEST:
-            state = SIGNALING_STATE_GET_ENDPOINT;
-            break;
-
-        case SERVICE_CALL_RESULT_SIGNALING_RECONNECT_ICE:
+        case HTTP_STATUS_SIGNALING_RECONNECT_ICE:
             state = SIGNALING_STATE_GET_ICE_CONFIG;
             break;
 
-        case SERVICE_CALL_NETWORK_CONNECTION_TIMEOUT:
-        case SERVICE_CALL_NETWORK_READ_TIMEOUT:
-        case SERVICE_CALL_REQUEST_TIMEOUT:
-        case SERVICE_CALL_GATEWAY_TIMEOUT:
+        case HTTP_STATUS_NETWORK_CONNECTION_TIMEOUT:
+        case HTTP_STATUS_NETWORK_READ_TIMEOUT:
+        case HTTP_STATUS_REQUEST_TIMEOUT:
+        case HTTP_STATUS_GATEWAY_TIMEOUT:
             // Attempt to get a new endpoint
             state = SIGNALING_STATE_GET_ENDPOINT;
             break;
@@ -728,18 +521,17 @@ STATUS executeConnectSignalingState(UINT64 customData, UINT64 time)
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    UINT64 startTimeInMacro = 0;
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
     // Notify of the state change
     if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
-        CHK_STATUS(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
-                                                                            SIGNALING_CLIENT_STATE_CONNECTING));
+        CHK(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
+                                                                     SIGNALING_CLIENT_STATE_CONNECTING) == STATUS_SUCCESS,
+            STATUS_SIGNALING_FSM_STATE_CHANGE_FAILED);
     }
 
-    PROFILE_CALL_WITH_T_OBJ(retStatus = connectSignalingChannel(pSignalingClient, time), pSignalingClient->diagnostics.connectCallTime,
-                            "Connect signaling call");
+    retStatus = connectSignalingChannel(pSignalingClient, time);
 
 CleanUp:
 
@@ -755,40 +547,32 @@ STATUS fromConnectedSignalingState(UINT64 customData, PUINT64 pState)
     UINT64 state = SIGNALING_STATE_CONNECTED;
     SIZE_T result;
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    result = ATOMIC_LOAD(&pSignalingClient->result);
+    result = ATOMIC_LOAD(&pSignalingClient->apiCallStatus);
     switch (result) {
-        case SERVICE_CALL_RESULT_OK:
+        case HTTP_STATUS_OK:
             if (!ATOMIC_LOAD_BOOL(&pSignalingClient->connected)) {
                 state = SIGNALING_STATE_DISCONNECTED;
             }
-
             break;
 
-        case SERVICE_CALL_RESOURCE_NOT_FOUND:
+        case HTTP_STATUS_NOT_FOUND:
+        case HTTP_STATUS_SIGNALING_GO_AWAY:
             state = SIGNALING_STATE_DESCRIBE;
             break;
 
-        case SERVICE_CALL_FORBIDDEN:
-        case SERVICE_CALL_NOT_AUTHORIZED:
+        case HTTP_STATUS_FORBIDDEN:
+        case HTTP_STATUS_UNAUTHORIZED:
             state = SIGNALING_STATE_GET_TOKEN;
             break;
 
-        case SERVICE_CALL_INTERNAL_ERROR:
-        case SERVICE_CALL_BAD_REQUEST:
-        case SERVICE_CALL_NETWORK_CONNECTION_TIMEOUT:
-        case SERVICE_CALL_NETWORK_READ_TIMEOUT:
-        case SERVICE_CALL_REQUEST_TIMEOUT:
-        case SERVICE_CALL_GATEWAY_TIMEOUT:
+        case HTTP_STATUS_INTERNAL_SERVER_ERROR:
+        case HTTP_STATUS_BAD_REQUEST:
             state = SIGNALING_STATE_GET_ENDPOINT;
             break;
 
-        case SERVICE_CALL_RESULT_SIGNALING_GO_AWAY:
-            state = SIGNALING_STATE_DESCRIBE;
-            break;
-
-        case SERVICE_CALL_RESULT_SIGNALING_RECONNECT_ICE:
+        case HTTP_STATUS_SIGNALING_RECONNECT_ICE:
             state = SIGNALING_STATE_GET_ICE_CONFIG;
             break;
 
@@ -815,7 +599,7 @@ STATUS executeConnectedSignalingState(UINT64 customData, UINT64 time)
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
     // Notify of the state change
     if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
@@ -834,23 +618,20 @@ STATUS fromDisconnectedSignalingState(UINT64 customData, PUINT64 pState)
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    UINT64 state = SIGNALING_STATE_READY;
+    UINT64 state = SIGNALING_STATE_DISCONNECTED;
     SIZE_T result;
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL && pState != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    result = ATOMIC_LOAD(&pSignalingClient->result);
+    result = ATOMIC_LOAD(&pSignalingClient->apiCallStatus);
     switch (result) {
-        case SERVICE_CALL_FORBIDDEN:
-        case SERVICE_CALL_NOT_AUTHORIZED:
+        case HTTP_STATUS_FORBIDDEN:
+        case HTTP_STATUS_UNAUTHORIZED:
             state = SIGNALING_STATE_GET_TOKEN;
             break;
 
-        case SERVICE_CALL_RESULT_SIGNALING_RECONNECT_ICE:
-            state = SIGNALING_STATE_GET_ICE_CONFIG;
-            break;
-
         default:
+            state = SIGNALING_STATE_GET_ICE_CONFIG;
             break;
     }
 
@@ -872,7 +653,7 @@ STATUS executeDisconnectedSignalingState(UINT64 customData, UINT64 time)
     STATUS retStatus = STATUS_SUCCESS;
     PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
     // Notify of the state change
     if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
@@ -886,110 +667,180 @@ CleanUp:
     return retStatus;
 }
 
-STATUS fromDeleteSignalingState(UINT64 customData, PUINT64 pState)
+UINT64 signaling_fsm_getCurrentTime(UINT64 customData)
+{
+    UNUSED_PARAM(customData);
+    return GETTIME();
+}
+
+STATUS signaling_fsm_create(PSignalingClient pSignalingClient, PSignalingFsmHandle pSignalingFsmHandle)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
-    PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    UINT64 state = SIGNALING_STATE_DELETE;
+    PStateMachine pStateMachine = NULL;
 
-    SIZE_T result;
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
-
-    result = ATOMIC_LOAD(&pSignalingClient->result);
-    switch (result) {
-        case SERVICE_CALL_FORBIDDEN:
-        case SERVICE_CALL_NOT_AUTHORIZED:
-            state = SIGNALING_STATE_GET_TOKEN;
-            break;
-
-        case SERVICE_CALL_RESULT_OK:
-        case SERVICE_CALL_RESOURCE_DELETED:
-        case SERVICE_CALL_RESOURCE_NOT_FOUND:
-            state = SIGNALING_STATE_DELETED;
-            break;
-
-        case SERVICE_CALL_BAD_REQUEST:
-            // This can happen if we come in from specifying ARN and skipping Describe state
-            // during the creation in which case we still need to get the proper update version
-            state = SIGNALING_STATE_DESCRIBE;
-            break;
-
-        default:
-            break;
-    }
-
-    *pState = state;
+    CHK_STATUS(createStateMachine(SIGNALING_STATE_MACHINE_STATES, SIGNALING_STATE_MACHINE_STATE_COUNT, pSignalingClient,
+                                    signaling_fsm_getCurrentTime, pSignalingClient, &pStateMachine));
 
 CleanUp:
+    *pSignalingFsmHandle = pStateMachine;
+    LEAVES();
+    return retStatus;
+}
+
+STATUS signaling_fsm_free(SignalingFsmHandle pStateMachine)
+{
+    ENTERS();
+    STATUS retStatus = STATUS_SUCCESS;
+
+    freeStateMachine(pStateMachine);
 
     LEAVES();
     return retStatus;
 }
 
-STATUS executeDeleteSignalingState(UINT64 customData, UINT64 time)
+STATUS signaling_fsm_step(PSignalingClient pSignalingClient, UINT64 expiration, UINT64 finalState)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
-    PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
+    UINT32 i;
+    BOOL locked = FALSE;
+    UINT64 currentTime;
+    PStateMachineState pState = NULL;
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
-    ATOMIC_STORE(&pSignalingClient->result, (SIZE_T) SERVICE_CALL_RESULT_NOT_SET);
-    ATOMIC_STORE_BOOL(&pSignalingClient->clientReady, FALSE);
+    MUTEX_LOCK(pSignalingClient->nestedFsmLock);
+    locked = TRUE;
 
-    // Notify of the state change
-    if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
-        CHK_STATUS(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
-                                                                            SIGNALING_CLIENT_STATE_DELETE));
+    while (TRUE) {
+        CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
+
+        // Check for a shutdown
+        CHK(!ATOMIC_LOAD_BOOL(&pSignalingClient->shutdown), retStatus);
+
+        if (STATUS_FAILED(retStatus)) {
+            CHK(pSignalingClient->pChannelInfo->retry, retStatus);
+            for (i = 0; i < SIGNALING_STATE_MACHINE_STATE_COUNT; i++) {
+                CHK(retStatus != SIGNALING_STATE_MACHINE_STATES[i].status, SIGNALING_STATE_MACHINE_STATES[i].status);
+            }
+        }
+
+        currentTime = SIGNALING_GET_CURRENT_TIME(pSignalingClient);
+
+        CHK(expiration == 0 || currentTime <= expiration, STATUS_SIGNALING_FSM_TIMEOUT);
+
+        // Fix-up the expired credentials transition
+        // NOTE: Api Gateway might not return an error that can be interpreted as unauthorized to
+        // make the correct transition to auth integration state.
+        if (pSignalingClient->pAwsCredentials != NULL && pSignalingClient->pAwsCredentials->expiration < currentTime) {
+            // Set the call status as auth error
+            ATOMIC_STORE(&pSignalingClient->apiCallStatus, (SIZE_T) HTTP_STATUS_UNAUTHORIZED);
+        }
+
+        retStatus = stepStateMachine(pSignalingClient->pStateMachine);
+
+        CHK_STATUS(getStateMachineCurrentState(pSignalingClient->pStateMachine, &pState));
+        CHK(!(pState->state == finalState), STATUS_SUCCESS);
     }
 
-    // Call the aggregate function
-    retStatus = deleteChannel(pSignalingClient, time);
-
 CleanUp:
+
+    if (locked) {
+        MUTEX_UNLOCK(pSignalingClient->nestedFsmLock);
+    }
+    CHK_LOG_ERR(retStatus);
 
     LEAVES();
     return retStatus;
 }
 
-STATUS fromDeletedSignalingState(UINT64 customData, PUINT64 pState)
+STATUS signaling_fsm_resetRetryCount(PSignalingClient pSignalingClient)
 {
     ENTERS();
     STATUS retStatus = STATUS_SUCCESS;
-    PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
-    UINT64 state = SIGNALING_STATE_DELETED;
+    BOOL locked = FALSE;
 
-    CHK(pSignalingClient != NULL && pState != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    // This is a terminal state
-    *pState = state;
+    MUTEX_LOCK(pSignalingClient->nestedFsmLock);
+    locked = TRUE;
+
+    resetStateMachineRetryCount(pSignalingClient->pStateMachine);
 
 CleanUp:
-
+    if (locked) {
+        MUTEX_UNLOCK(pSignalingClient->nestedFsmLock);
+    }
     LEAVES();
     return retStatus;
 }
 
-STATUS executeDeletedSignalingState(UINT64 customData, UINT64 time)
+STATUS signaling_fsm_setCurrentState(PSignalingClient pSignalingClient, UINT64 state)
 {
     ENTERS();
-    UNUSED_PARAM(time);
     STATUS retStatus = STATUS_SUCCESS;
-    PSignalingClient pSignalingClient = SIGNALING_CLIENT_FROM_CUSTOM_DATA(customData);
+    BOOL locked = FALSE;
 
-    CHK(pSignalingClient != NULL, STATUS_NULL_ARG);
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
 
-    // Notify of the state change
-    if (pSignalingClient->signalingClientCallbacks.stateChangeFn != NULL) {
-        CHK_STATUS(pSignalingClient->signalingClientCallbacks.stateChangeFn(pSignalingClient->signalingClientCallbacks.customData,
-                                                                            SIGNALING_CLIENT_STATE_DELETED));
-    }
+    MUTEX_LOCK(pSignalingClient->nestedFsmLock);
+    locked = TRUE;
 
-    // No-op
+    setStateMachineCurrentState(pSignalingClient->pStateMachine, state);
 
 CleanUp:
 
+    if (locked) {
+        MUTEX_UNLOCK(pSignalingClient->nestedFsmLock);
+    }
+    LEAVES();
+    return retStatus;
+}
+
+UINT64 signaling_fsm_getCurrentState(PSignalingClient pSignalingClient)
+{
+    ENTERS();
+    STATUS retStatus = STATUS_SUCCESS;
+    PStateMachineState pStateMachineState = NULL;
+    UINT64 state = SIGNALING_STATE_NONE;
+    BOOL locked = FALSE;
+
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
+
+    MUTEX_LOCK(pSignalingClient->nestedFsmLock);
+    locked = TRUE;
+
+    CHK_STATUS(getStateMachineCurrentState(pSignalingClient->pStateMachine, &pStateMachineState));
+    state = pStateMachineState->state;
+
+CleanUp:
+    if (locked) {
+        MUTEX_UNLOCK(pSignalingClient->nestedFsmLock);
+    }
+    LEAVES();
+    return state;
+}
+
+STATUS signaling_fsm_accept(PSignalingClient pSignalingClient, UINT64 requiredStates)
+{
+    ENTERS();
+    STATUS retStatus = STATUS_SUCCESS;
+    BOOL locked = FALSE;
+
+    CHK(pSignalingClient != NULL, STATUS_SIGNALING_FSM_NULL_ARG);
+
+    MUTEX_LOCK(pSignalingClient->nestedFsmLock);
+    locked = TRUE;
+
+    // Step the state machine
+    CHK_STATUS(acceptStateMachineState(pSignalingClient->pStateMachine, requiredStates));
+
+CleanUp:
+    if (locked) {
+        MUTEX_UNLOCK(pSignalingClient->nestedFsmLock);
+    }
+    CHK_LOG_ERR(retStatus);
     LEAVES();
     return retStatus;
 }

@@ -1,5 +1,5 @@
 #define LOG_CLASS "SDP"
-#include "../Include_i.h"
+#include "SessionDescription.h"
 
 STATUS parseMediaName(PSessionDescription pSessionDescription, PCHAR pch, UINT32 lineLen)
 {
@@ -76,7 +76,7 @@ STATUS deserializeSessionDescription(PSessionDescription pSessionDescription, PC
     STATUS retStatus = STATUS_SUCCESS;
     PCHAR curr, tail, next;
     UINT32 lineLen;
-    CHK(sdpBytes != NULL, STATUS_SESSION_DESCRIPTION_INVALID_SESSION_DESCRIPTION);
+    CHK(sdpBytes != NULL, STATUS_SDP_INVALID_SESSION_DESCRIPTION);
 
     curr = sdpBytes;
     tail = sdpBytes + STRLEN(sdpBytes);

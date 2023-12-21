@@ -2,7 +2,8 @@
  * Kinesis Video TLS
  */
 #define LOG_CLASS "TLS_mbedtls"
-#include "../Include_i.h"
+#include "IOBuffer.h"
+#include "Rtp.h"
 
 STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSession)
 {
@@ -10,10 +11,10 @@ STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSessi
     STATUS retStatus = STATUS_SUCCESS;
     PTlsSession pTlsSession = NULL;
 
-    CHK(ppTlsSession != NULL && pCallbacks != NULL && pCallbacks->outboundPacketFn != NULL, STATUS_NULL_ARG);
+    CHK(ppTlsSession != NULL && pCallbacks != NULL && pCallbacks->outboundPacketFn != NULL, STATUS_TLS_NULL_ARG);
 
     pTlsSession = (PTlsSession) MEMCALLOC(1, SIZEOF(TlsSession));
-    CHK(pTlsSession != NULL, STATUS_NOT_ENOUGH_MEMORY);
+    CHK(pTlsSession != NULL, STATUS_TLS_NOT_ENOUGH_MEMORY);
 
     CHK_STATUS(createIOBuffer(DEFAULT_MTU_SIZE, &pTlsSession->pReadBuffer));
     pTlsSession->callbacks = *pCallbacks;
@@ -25,8 +26,8 @@ STATUS createTlsSession(PTlsSessionCallbacks pCallbacks, PTlsSession* ppTlsSessi
     mbedtls_x509_crt_init(&pTlsSession->cacert);
     mbedtls_ssl_config_init(&pTlsSession->sslCtxConfig);
     mbedtls_ssl_init(&pTlsSession->sslCtx);
-    CHK(mbedtls_ctr_drbg_seed(&pTlsSession->ctrDrbg, mbedtls_entropy_func, &pTlsSession->entropy, NULL, 0) == 0, STATUS_CREATE_SSL_FAILED);
-    CHK(mbedtls_x509_crt_parse_file(&pTlsSession->cacert, KVS_CA_CERT_PATH) == 0, STATUS_INVALID_CA_CERT_PATH);
+    CHK(mbedtls_ctr_drbg_seed(&pTlsSession->ctrDrbg, mbedtls_entropy_func, &pTlsSession->entropy, NULL, 0) == 0, STATUS_TLS_CREATE_SSL_FAILED);
+    CHK(mbedtls_x509_crt_parse_file(&pTlsSession->cacert, KVS_CA_CERT_PATH) == 0, STATUS_TLS_INVALID_CA_CERT_PATH);
 
 CleanUp:
     if (STATUS_FAILED(retStatus) && pTlsSession != NULL) {
@@ -47,7 +48,7 @@ STATUS freeTlsSession(PTlsSession* ppTlsSession)
     STATUS retStatus = STATUS_SUCCESS;
     PTlsSession pTlsSession = NULL;
 
-    CHK(ppTlsSession != NULL, STATUS_NULL_ARG);
+    CHK(ppTlsSession != NULL, STATUS_TLS_NULL_ARG);
 
     pTlsSession = *ppTlsSession;
     CHK(pTlsSession != NULL, retStatus);
@@ -71,7 +72,7 @@ INT32 tlsSessionSendCallback(PVOID customData, const unsigned char* buf, ULONG l
     STATUS retStatus = STATUS_SUCCESS;
     PTlsSession pTlsSession = (PTlsSession) customData;
 
-    CHK(pTlsSession != NULL, STATUS_NULL_ARG);
+    CHK(pTlsSession != NULL, STATUS_TLS_NULL_ARG);
 
     pTlsSession->callbacks.outboundPacketFn(pTlsSession->callbacks.outBoundPacketFnCustomData, (PBYTE) buf, len);
 
@@ -87,7 +88,7 @@ INT32 tlsSessionReceiveCallback(PVOID customData, unsigned char* buf, ULONG len)
     PIOBuffer pBuffer;
     UINT32 readBytes = MBEDTLS_ERR_SSL_WANT_READ;
 
-    CHK(pTlsSession != NULL, STATUS_NULL_ARG);
+    CHK(pTlsSession != NULL, STATUS_TLS_NULL_ARG);
 
     pBuffer = pTlsSession->pReadBuffer;
 
@@ -106,24 +107,24 @@ STATUS tlsSessionStart(PTlsSession pTlsSession, BOOL isServer)
     STATUS retStatus = STATUS_SUCCESS;
     INT32 sslRet;
 
-    CHK(pTlsSession != NULL, STATUS_NULL_ARG);
+    CHK(pTlsSession != NULL, STATUS_TLS_NULL_ARG);
     CHK(pTlsSession->state == TLS_SESSION_STATE_NEW, retStatus);
 
     CHK(mbedtls_ssl_config_defaults(&pTlsSession->sslCtxConfig, isServer ? MBEDTLS_SSL_IS_SERVER : MBEDTLS_SSL_IS_CLIENT,
                                     MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT) == 0,
-        STATUS_CREATE_SSL_FAILED);
+        STATUS_TLS_CREATE_SSL_FAILED);
 
     mbedtls_ssl_conf_ca_chain(&pTlsSession->sslCtxConfig, &pTlsSession->cacert, NULL);
     mbedtls_ssl_conf_authmode(&pTlsSession->sslCtxConfig, MBEDTLS_SSL_VERIFY_REQUIRED);
     mbedtls_ssl_conf_rng(&pTlsSession->sslCtxConfig, mbedtls_ctr_drbg_random, &pTlsSession->ctrDrbg);
-    CHK(mbedtls_ssl_setup(&pTlsSession->sslCtx, &pTlsSession->sslCtxConfig) == 0, STATUS_SSL_CTX_CREATION_FAILED);
+    CHK(mbedtls_ssl_setup(&pTlsSession->sslCtx, &pTlsSession->sslCtxConfig) == 0, STATUS_TLS_SSL_CTX_SETUP_FAILED);
     mbedtls_ssl_set_mtu(&pTlsSession->sslCtx, DEFAULT_MTU_SIZE);
     mbedtls_ssl_set_bio(&pTlsSession->sslCtx, pTlsSession, tlsSessionSendCallback, tlsSessionReceiveCallback, NULL);
 
     /* init and send handshake */
     tlsSessionChangeState(pTlsSession, TLS_SESSION_STATE_CONNECTING);
     sslRet = mbedtls_ssl_handshake(&pTlsSession->sslCtx);
-    CHK(sslRet == MBEDTLS_ERR_SSL_WANT_READ || sslRet == MBEDTLS_ERR_SSL_WANT_WRITE, STATUS_SSL_CTX_CREATION_FAILED);
+    CHK(sslRet == MBEDTLS_ERR_SSL_WANT_READ || sslRet == MBEDTLS_ERR_SSL_WANT_WRITE, STATUS_TLS_SSL_HANDSHAKE_FAILED);
     LOG_MBEDTLS_ERROR("mbedtls_ssl_handshake", sslRet);
 
 CleanUp:
@@ -142,9 +143,9 @@ STATUS tlsSessionProcessPacket(PTlsSession pTlsSession, PBYTE pData, UINT32 buff
     BOOL iterate = TRUE;
     PIOBuffer pReadBuffer;
 
-    CHK(pTlsSession != NULL && pData != NULL && pDataLen != NULL, STATUS_NULL_ARG);
-    CHK(pTlsSession->state != TLS_SESSION_STATE_NEW, STATUS_SOCKET_CONNECTION_NOT_READY_TO_SEND);
-    CHK(pTlsSession->state != TLS_SESSION_STATE_CLOSED, STATUS_SOCKET_CONNECTION_CLOSED_ALREADY);
+    CHK(pTlsSession != NULL && pData != NULL && pDataLen != NULL, STATUS_TLS_NULL_ARG);
+    CHK(pTlsSession->state != TLS_SESSION_STATE_NEW, STATUS_TLS_CONNECTION_NOT_READY_TO_SEND);
+    CHK(pTlsSession->state != TLS_SESSION_STATE_CLOSED, STATUS_SOCKET_CONN_CLOSED_ALREADY);
 
     pReadBuffer = pTlsSession->pReadBuffer;
     CHK_STATUS(ioBufferWrite(pReadBuffer, pData, *pDataLen));
@@ -198,7 +199,7 @@ STATUS tlsSessionPutApplicationData(PTlsSession pTlsSession, PBYTE pData, UINT32
     BOOL iterate = TRUE;
     INT32 sslRet;
 
-    CHK(pTlsSession != NULL, STATUS_NULL_ARG);
+    CHK(pTlsSession != NULL, STATUS_TLS_NULL_ARG);
 
     while (iterate && writtenBytes < dataLen) {
         sslRet = mbedtls_ssl_write(&pTlsSession->sslCtx, pData + writtenBytes, dataLen - writtenBytes);
@@ -223,7 +224,7 @@ STATUS tlsSessionShutdown(PTlsSession pTlsSession)
 {
     STATUS retStatus = STATUS_SUCCESS;
 
-    CHK(pTlsSession != NULL, STATUS_NULL_ARG);
+    CHK(pTlsSession != NULL, STATUS_TLS_NULL_ARG);
     CHK(pTlsSession->state != TLS_SESSION_STATE_CLOSED, retStatus);
 
     while (mbedtls_ssl_close_notify(&pTlsSession->sslCtx) == MBEDTLS_ERR_SSL_WANT_WRITE) {

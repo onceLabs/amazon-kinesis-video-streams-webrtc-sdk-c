@@ -9,6 +9,9 @@ Signaling State Machine internal include file
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "kvs/error.h"
+#include "kvs/common_defs.h"
+#include "IceAgent.h"
 
 /**
  * Ice states definitions

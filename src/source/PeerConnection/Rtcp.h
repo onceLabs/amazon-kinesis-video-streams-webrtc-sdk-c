@@ -6,10 +6,14 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#include "PeerConnection.h"
+#include "RtcpPacket.h"
 
 STATUS onRtcpPacket(PKvsPeerConnection, PBYTE, UINT32);
 STATUS onRtcpRembPacket(PRtcpPacket, PKvsPeerConnection);
 STATUS onRtcpPLIPacket(PRtcpPacket, PKvsPeerConnection);
+
+#ifdef ENABLE_TWCC_FUNCTION
 STATUS parseRtcpTwccPacket(PRtcpPacket, PTwccManager);
 STATUS onRtcpTwccPacket(PRtcpPacket, PKvsPeerConnection);
 
@@ -42,6 +46,7 @@ typedef enum {
     (((packetChunk) >> (14u - (i) *TWCC_STATUSVECTOR_SSIZE(packetChunk))) & TWCC_STATUSVECTOR_SMASK(packetChunk))
 #define TWCC_STATUSVECTOR_COUNT(packetChunk) (TWCC_STATUSVECTOR_IS_2BIT(packetChunk) ? 7 : 14)
 #define TWCC_PACKET_STATUS_COUNT(payload)    (getUnalignedInt16BigEndian((payload) + 10))
+#endif
 
 #ifdef __cplusplus
 }
