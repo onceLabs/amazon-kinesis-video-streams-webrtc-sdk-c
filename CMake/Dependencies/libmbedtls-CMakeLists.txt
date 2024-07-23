@@ -21,7 +21,7 @@ ExternalProject_Add(
   # TODO: needs to replace this with official mbedTLS branch
   #       when they add DTLS-SRTP extension support.
   # Reference: https://github.com/ARMmbed/mbedtls/pull/3235
-  GIT_REPOSITORY  https://github.com/lherman-cs/mbedtls.git
+  GIT_REPOSITORY  https://github.com/onceLabs/mbedtls.git
   GIT_TAG         a2c1a8f75f0478bad0479bbc9eb9ec2a4376c5e6
   PREFIX          ${CMAKE_CURRENT_BINARY_DIR}/build
   CMAKE_ARGS
