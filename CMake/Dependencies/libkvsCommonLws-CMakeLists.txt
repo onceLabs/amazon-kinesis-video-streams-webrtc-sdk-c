@@ -5,7 +5,7 @@ project(libkvsCommonLws-download NONE)
 include(ExternalProject)
 
 ExternalProject_Add(libkvsCommonLws-download
-    GIT_REPOSITORY    https://github.com/iotlabtpe/amazon-kinesis-video-streams-producer-c.git
+    GIT_REPOSITORY    https://github.com/onceLabs/amazon-kinesis-video-streams-producer-c.git
     GIT_TAG           e1de292cbbd854d187e6f8b9b417526a90183c28
     PREFIX            ${CMAKE_CURRENT_BINARY_DIR}/build
     CMAKE_ARGS        
