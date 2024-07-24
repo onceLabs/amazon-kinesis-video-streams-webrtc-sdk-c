@@ -6,6 +6,5 @@ build
 cmake-build-debug/
 cmake-build-release/
 doc/
-open-source/
 outputs
 tags
